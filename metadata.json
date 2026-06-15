@@ -1,0 +1,6 @@
+{
+  "name": "Chroma Deck 2077",
+  "description": "An interactive cyberpunk Netrunner console with a live breach protocol decryptor, cyberware biometric analyzer, and Gemini-powered neural link companion constructs.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
