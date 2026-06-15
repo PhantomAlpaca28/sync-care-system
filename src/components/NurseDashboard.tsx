@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { Patient, AlertNotification, CareTask, MedicationScheduleItem, BloodRequest } from "../types";
 import {
   Card,
@@ -39,6 +39,12 @@ interface NurseDashboardProps {
   bloodRequests: BloodRequest[];
   currentNurse: string;
   currentNurseId: string;
+  nurseSessionEvents?: Record<string, any[]>;
+  setNurseSessionEvents?: React.Dispatch<React.SetStateAction<Record<string, any[]>>>;
+  iwsEvaluations?: Record<string, any>;
+  setIwsEvaluations?: React.Dispatch<React.SetStateAction<Record<string, any>>>;
+  combinedDoctorAlerts?: any[];
+  onAddCombinedAlert?: (newAlert: any) => void;
   onSelectPatient: (patient: Patient) => void;
   onAddPatientTimelineNote: (patientId: string, noteText: string) => void;
   onAcknowledgeAlert: (id: string) => void;
@@ -51,6 +57,12 @@ export default function NurseDashboard({
   bloodRequests,
   currentNurse,
   currentNurseId,
+  nurseSessionEvents = {},
+  setNurseSessionEvents,
+  iwsEvaluations = {},
+  setIwsEvaluations,
+  combinedDoctorAlerts = [],
+  onAddCombinedAlert,
   onSelectPatient,
   onAddPatientTimelineNote,
   onAcknowledgeAlert,
@@ -73,6 +85,20 @@ export default function NurseDashboard({
 
   // Clinical Progress notes
   const [newProgressNote, setNewProgressNote] = useState("");
+  const [selectedNotePatientId, setSelectedNotePatientId] = useState<string>("");
+
+  // System 1 (CRE) Simulator states
+  const [creLoading, setCreLoading] = useState(false);
+  const [creResult, setCreResult] = useState<any>(null);
+  const [creError, setCreError] = useState("");
+  const [creMeds, setCreMeds] = useState("Heparin, Nitroglycerin, Saline, Oxygen");
+  const [creTrend, setCreTrend] = useState<"Rising" | "Falling" | "Stable">("Stable");
+  const [creNurseLoad, setCreNurseLoad] = useState(4);
+  const [creAssessmentMinutes, setCreAssessmentMinutes] = useState(45);
+
+  // System 2 (IWS) Simulator states
+  const [iwsLoading, setIwsLoading] = useState(false);
+  const [iwsError, setIwsError] = useState("");
 
   // 1. DYNAMIC BED ASSIGNMENT LOGISTICS: 
   // Nurse Meera is assigned ICU + Cardiology beds.
@@ -101,6 +127,14 @@ export default function NurseDashboard({
   const activePatient = useMemo(() => {
     return patients.find((p) => p.id === selectedPatientId) || assignedPatients[0] || null;
   }, [patients, selectedPatientId, assignedPatients]);
+
+  useEffect(() => {
+    if (activePatient) {
+      setSelectedNotePatientId(activePatient.id);
+    } else if (patients.length > 0 && !selectedNotePatientId) {
+      setSelectedNotePatientId(patients[0].id);
+    }
+  }, [activePatient, patients]);
 
   // Alarms related only to this nurse's assigned patients
   const assignedAlerts = useMemo(() => {
@@ -237,16 +271,52 @@ export default function NurseDashboard({
   };
 
   const handleSaveNotes = () => {
-    if (!activePatient || !newProgressNote.trim()) return;
+    const targetPatient = patients.find(p => p.id === selectedNotePatientId) || activePatient;
+    if (!targetPatient || !newProgressNote.trim()) {
+      alert("Please select a patient and fill in progress note details.");
+      return;
+    }
 
-    onAddPatientTimelineNote(activePatient.id, `NURSING NOTES // ADDED BY ${currentNurse}: ${newProgressNote}`);
+    onAddPatientTimelineNote(targetPatient.id, `NURSING NOTES // ADDED BY ${currentNurse}: ${newProgressNote}`);
     
+    // Log a note_filed event for physical charting
+    if (setNurseSessionEvents) {
+      setNurseSessionEvents(prev => {
+        const events = prev[targetPatient.id] || [];
+        const updated = [...events, {
+          event_type: "note_filed",
+          timestamp: new Date().toISOString(),
+          duration_seconds: Math.floor(Math.random() * 45) + 35,
+          action_taken: true
+        }].slice(-15);
+        return { ...prev, [targetPatient.id]: updated };
+      });
+    }
+
     setShiftLogs(prev => [
-      { id: `sl_note_${Date.now()}`, time: new Date().toLocaleTimeString(), type: "note", message: `Logged shift nursing note for Room ${activePatient.roomNumber} (${activePatient.name})` },
+      { id: `sl_note_${Date.now()}`, time: new Date().toLocaleTimeString(), type: "note", message: `Logged shift nursing note for Room ${targetPatient.roomNumber} (${targetPatient.name})` },
       ...prev
     ]);
-    alert("Nursing Shift Note successfully registered in core electronic client charts.");
+    alert(`Nursing Shift Note successfully registered for ${targetPatient.name} (Room ${targetPatient.roomNumber}) in core electronic client charts.`);
     setNewProgressNote("");
+  };
+
+  const selectPatientWithTracking = (patId: string) => {
+    setSelectedPatientId(patId);
+
+    // Track nurse visiting telemetry
+    if (setNurseSessionEvents) {
+      setNurseSessionEvents(prev => {
+        const events = prev[patId] || [];
+        const updated = [...events, {
+          event_type: "page_view",
+          timestamp: new Date().toISOString(),
+          duration_seconds: Math.floor(Math.random() * 20) + 10,
+          action_taken: false
+        }].slice(-15);
+        return { ...prev, [patId]: updated };
+      });
+    }
   };
 
   const handleCreateBloodRequestSubmit = (e: React.FormEvent) => {
@@ -345,7 +415,7 @@ export default function NurseDashboard({
                     return (
                       <button
                         key={p.id}
-                        onClick={() => setSelectedPatientId(p.id)}
+                        onClick={() => selectPatientWithTracking(p.id)}
                         className={`w-full text-left p-3 rounded-xl border flex items-center justify-between transition-all cursor-pointer ${
                           isSelected
                             ? "bg-[#0c1c35] border-cyan-500 text-white shadow-lg"
@@ -464,6 +534,360 @@ export default function NurseDashboard({
                         </div>
                       ))
                     )}
+                  </div>
+
+                  {/* System 1: Counterfactual Reversal Engine (CRE) & System 2: Implicit Worry Signal (IWS) Panel */}
+                  <div className="border-t border-slate-900 pt-5 space-y-6">
+                    <div className="flex items-center justify-between border-b border-slate-900 pb-2.5">
+                      <div>
+                        <h4 className="text-xs font-display tracking-widest text-[#06b6d4] uppercase font-bold flex items-center gap-1.5">
+                          <Activity className="h-4 w-4 text-[#06b6d4]" />
+                          CareSync Clinical AI Engines (CRE & IWS)
+                        </h4>
+                        <p className="text-[10px] uppercase font-mono text-slate-500 mt-0.5">Dual-System Clinical Intelligence Diagnostic Center</p>
+                      </div>
+                      <span className="text-[9px] font-mono font-black bg-cyan-950/40 text-[#06b6d4] border border-[#06b6d4]/20 rounded px-2 py-0.5 uppercase tracking-widest animate-pulse">
+                        Engine Operational
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Left Sub-Panel: Counterfactual Reversal Engine */}
+                      <div className="bg-[#02050c] border border-slate-900 rounded-xl p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-indigo-400 uppercase">System 1: Clinical Reversals (CRE)</span>
+                          {activePatient.riskScore >= 60 ? (
+                            <span className="text-[8px] font-mono bg-amber-550/10 text-amber-500 border border-amber-500/20 px-1.5 py-0.2 rounded font-bold uppercase animate-pulse">
+                              Risk Threshold Exceeded (≥60%)
+                            </span>
+                          ) : (
+                            <span className="text-[8px] font-mono bg-slate-900 text-slate-500 border border-slate-800 px-1.5 py-0.2 rounded font-bold uppercase">
+                              Risk Below Threshold
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[10.5px] text-slate-400 leading-normal font-sans">
+                          Compute the minimum viable clinical intervention protocol designed to move this patient's risk score (current: <strong className="text-white">{activePatient.riskScore}%</strong>) below the safe alarm threshold.
+                        </p>
+
+                        <div className="space-y-2 text-3xs font-mono">
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="text-slate-500 uppercase block mb-1">Vitals Trend</label>
+                              <select 
+                                value={creTrend} 
+                                onChange={(e) => setCreTrend(e.target.value as any)}
+                                className="w-full bg-slate-950 border border-slate-800 text-slate-300 rounded px-2 py-1 text-[10px] font-mono uppercase focus:outline-none focus:border-cyan-500"
+                              >
+                                <option value="Stable">Stable →</option>
+                                <option value="Rising">Rising ↑</option>
+                                <option value="Falling">Falling ↓</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="text-slate-500 uppercase block mb-1">Nurse Care Load</label>
+                              <input 
+                                type="number" 
+                                min={1} 
+                                max={10} 
+                                value={creNurseLoad}
+                                onChange={(e) => setCreNurseLoad(parseInt(e.target.value) || 4)}
+                                className="w-full bg-slate-950 border border-slate-800 text-slate-300 rounded px-2 py-1 text-[10px] font-mono focus:outline-none focus:border-cyan-500"
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <label className="text-slate-500 uppercase block mb-1">Active Medications</label>
+                            <input 
+                              type="text" 
+                              value={creMeds}
+                              onChange={(e) => setCreMeds(e.target.value)}
+                              placeholder="Comma-separated drugs..."
+                              className="w-full bg-slate-950 border border-slate-800 text-slate-300 rounded px-2.5 py-1 text-[10px] font-mono focus:outline-none focus:border-[#06b6d4]"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-slate-500 uppercase block mb-1">Minutes Since Assessment</label>
+                            <input 
+                              type="number" 
+                              min={1} 
+                              value={creAssessmentMinutes}
+                              onChange={(e) => setCreAssessmentMinutes(parseInt(e.target.value) || 45)}
+                              className="w-full bg-slate-950 border border-slate-800 text-slate-300 rounded px-2 py-1 text-[10px] font-mono focus:outline-none focus:border-[#06b6d4]"
+                            />
+                          </div>
+                        </div>
+
+                        <Button 
+                          variant={activePatient.riskScore >= 60 ? "cyan" : "ghost"} 
+                          size="xs" 
+                          className="w-full text-xs font-bold" 
+                          onClick={async () => {
+                            setCreLoading(true);
+                            setCreError("");
+                            setCreResult(null);
+                            try {
+                              const res = await fetch("/api/clinical/cre", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  patient: activePatient,
+                                  lastAssessmentMinutes: creAssessmentMinutes,
+                                  nurseLoad: creNurseLoad,
+                                  meds: creMeds.split(",").map(m => m.trim()).filter(Boolean),
+                                  trend: creTrend.toLowerCase()
+                                })
+                              });
+                              if (!res.ok) throw new Error("Failed to process reversal metrics");
+                              const data = await res.json();
+                              setCreResult(data);
+                            } catch (err: any) {
+                              setCreError(err.message || "CRE computing crash");
+                            } finally {
+                              setCreLoading(false);
+                            }
+                          }}
+                        >
+                          {creLoading ? "Processing Reversal Vector..." : "Run Reversal Diagnostics (CRE)"}
+                        </Button>
+
+                        {/* CRE RESULTS PANEL */}
+                        {creResult && (
+                          <div className="space-y-2 pt-2 border-t border-slate-900 animate-[fadeIn_0.15s_ease]">
+                            <span className="text-4xs font-mono text-purple-400 uppercase block font-black">Reversal Protocols Computed:</span>
+                            <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1">
+                              {creResult.reversal_options?.map((opt: any, idx: number) => {
+                                const isFastest = opt.priority === "fastest";
+                                const isSingle = opt.priority === "single_action";
+                                const isEscalate = opt.priority === "escalate";
+                                return (
+                                  <div key={idx} className={`p-2 rounded border border-slate-900/40 text-3xs font-mono ${
+                                    isFastest ? "bg-purple-950/20 border-l-2 border-l-purple-500" :
+                                    isSingle ? "bg-emerald-950/10 border-l-2 border-l-emerald-500" :
+                                    "bg-rose-950/20 border-l-2 border-l-rose-500"
+                                  }`}>
+                                    <div className="flex justify-between items-center font-bold mb-1">
+                                      <span className="text-white uppercase text-[9px]">{opt.label}</span>
+                                      <span className={`text-[8px] uppercase tracking-wider px-1 rounded ${
+                                        isFastest ? "bg-purple-900 text-purple-300" :
+                                        isSingle ? "bg-emerald-900 text-emerald-300" :
+                                        "bg-rose-950 text-rose-300"
+                                      }`}>{opt.priority}</span>
+                                    </div>
+                                    <ul className="list-disc list-inside space-y-0.5 text-slate-300">
+                                      {opt.interventions?.map((line: string, lIdx: number) => (
+                                        <li key={lIdx}>{line}</li>
+                                      ))}
+                                    </ul>
+                                    <div className="grid grid-cols-2 gap-2 mt-1.5 text-[8.5px] border-t border-slate-900/30 pt-1 text-slate-400">
+                                      <div>Est. Time: <strong className="text-white">{opt.time_estimate_minutes} min</strong></div>
+                                      <div className="text-right">Executable: <strong className="text-white">{opt.nurse_executable ? "NURSE" : "DOCTOR"}</strong></div>
+                                    </div>
+                                    <div className="mt-1 text-[8px] italic text-slate-400 leading-snug font-sans">
+                                      <strong>Rationale:</strong> {opt.rationale}
+                                    </div>
+                                    <div className="mt-1 text-right text-[8.5px]">
+                                      Risk Red: <span className="line-through text-rose-450">{creResult.current_risk}%</span> → <span className="text-emerald-400 font-bold">{opt.predicted_risk_after}%</span>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                        {creError && <div className="text-3xs text-rose-450 font-mono text-center">{creError}</div>}
+                      </div>
+
+                      {/* Right Sub-Panel: Implicit Worry Signal */}
+                      <div className="bg-[#02050c] border border-slate-900 rounded-xl p-4 space-y-3 flex flex-col justify-between">
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-bold text-amber-500 uppercase">System 2: Implicit Worry (IWS)</span>
+                            <span className="text-[8px] font-mono bg-[#0c1322] border border-slate-800 rounded px-1.5 py-0.2 text-slate-400 font-bold">
+                              {nurseSessionEvents[activePatient.id]?.length || 0} Events Recorded
+                            </span>
+                          </div>
+                          
+                          <p className="text-[10.5px] text-slate-400 leading-normal font-sans">
+                            System 2 passively infers professional worry from clinical metadata and behavioral interaction (repeated clicks, telemetry dwell, abandoned drafts). Check divergence against active sensors.
+                          </p>
+
+                          {/* Pattern Injections */}
+                          <div className="space-y-1.5">
+                            <span className="text-4xs font-mono text-slate-500 uppercase block font-black font-sans">Simulate Clinician Worry Clicks:</span>
+                            <div className="grid grid-cols-2 gap-1.5">
+                              <button 
+                                onClick={() => {
+                                  if (setNurseSessionEvents) {
+                                    setNurseSessionEvents(prev => ({
+                                      ...prev,
+                                      [activePatient.id]: []
+                                    }));
+                                    if (setIwsEvaluations) {
+                                      setIwsEvaluations(prev => ({
+                                        ...prev,
+                                        [activePatient.id]: null
+                                      }));
+                                    }
+                                  }
+                                }}
+                                className="bg-slate-950 border border-slate-905 text-slate-400 hover:text-white hover:bg-slate-900 text-3xs font-mono py-1 rounded transition-all cursor-pointer uppercase text-left pl-2"
+                              >
+                                ⚕ Clear History (Score 0)
+                              </button>
+                              <button 
+                                onClick={() => {
+                                  if (setNurseSessionEvents) {
+                                    const now = Date.now();
+                                    const tEvents = [
+                                      { event_type: "page_view", timestamp: new Date(now - 120000).toISOString(), duration_seconds: 40, action_taken: false },
+                                      { event_type: "vitals_view", timestamp: new Date(now).toISOString(), duration_seconds: 15, action_taken: true }
+                                    ];
+                                    setNurseSessionEvents(prev => ({ ...prev, [activePatient.id]: tEvents }));
+                                  }
+                                }}
+                                className="bg-slate-950 border border-slate-900 text-[#a3e635] hover:bg-slate-900 text-3xs font-mono py-1 rounded transition-all cursor-pointer uppercase text-left pl-2"
+                              >
+                                ⚕ Mild Activity (Score 1)
+                              </button>
+                              <button 
+                                onClick={() => {
+                                  if (setNurseSessionEvents) {
+                                    const now = Date.now();
+                                    const tEvents = [
+                                      { event_type: "page_view", timestamp: new Date(now - 600000).toISOString(), duration_seconds: 85, action_taken: false },
+                                      { event_type: "vitals_view", timestamp: new Date(now).toISOString(), duration_seconds: 92, action_taken: false },
+                                      { event_type: "page_view", timestamp: new Date(now + 1000).toISOString(), duration_seconds: 45, action_taken: false }
+                                    ];
+                                    setNurseSessionEvents(prev => ({ ...prev, [activePatient.id]: tEvents }));
+                                  }
+                                }}
+                                className="bg-slate-950 border border-slate-900 text-orange-400 hover:bg-slate-900 text-3xs font-mono py-1 rounded transition-all cursor-pointer uppercase text-left pl-2"
+                              >
+                                ⚕ Moderate Worry (Score 2)
+                              </button>
+                              <button 
+                                onClick={() => {
+                                  if (setNurseSessionEvents) {
+                                    const now = Date.now();
+                                    const tEvents = [
+                                      { event_type: "page_view", timestamp: new Date(now - 60000).toISOString(), duration_seconds: 12, action_taken: false },
+                                      { event_type: "vitals_view", timestamp: new Date(now - 30000).toISOString(), duration_seconds: 80, action_taken: false },
+                                      { event_type: "note_abandoned", timestamp: new Date(now).toISOString(), duration_seconds: 110, action_taken: false }
+                                    ];
+                                    setNurseSessionEvents(prev => ({ ...prev, [activePatient.id]: tEvents }));
+                                  }
+                                }}
+                                className="bg-slate-950 border border-slate-900 text-amber-500 hover:bg-slate-900 text-3xs font-mono py-1 rounded transition-all cursor-pointer uppercase text-left pl-2 hover:shadow"
+                              >
+                                ⚕ Abandon Note (Score 3)
+                              </button>
+                              <button 
+                                onClick={() => {
+                                  if (setNurseSessionEvents) {
+                                    const now = Date.now();
+                                    const tEvents = [
+                                      { event_type: "page_view", timestamp: new Date(now - 500000).toISOString(), duration_seconds: 22, action_taken: false },
+                                      { event_type: "vitals_view", timestamp: new Date(now - 450000).toISOString(), duration_seconds: 20, action_taken: false },
+                                      { event_type: "page_view", timestamp: new Date(now - 350000).toISOString(), duration_seconds: 30, action_taken: false },
+                                      { event_type: "vitals_view", timestamp: new Date(now - 280000).toISOString(), duration_seconds: 18, action_taken: false },
+                                      { event_type: "page_view", timestamp: new Date(now).toISOString(), duration_seconds: 21, action_taken: false }
+                                    ];
+                                    setNurseSessionEvents(prev => ({ ...prev, [activePatient.id]: tEvents }));
+                                  }
+                                }}
+                                className="col-span-2 bg-slate-950 border border-slate-900 text-rose-500 hover:bg-[#121c32] text-2xs font-mono py-1.5 rounded transition-all cursor-pointer uppercase text-center font-bold"
+                              >
+                                ☠ Repeat View Repetitions (Score 4)
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="space-y-3 pt-3">
+                          <Button 
+                            variant="cyan" 
+                            size="xs" 
+                            className="w-full text-xs font-bold"
+                            onClick={async () => {
+                              setIwsLoading(true);
+                              setIwsError("");
+                              try {
+                                const res = await fetch("/api/clinical/evaluate-iws", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({
+                                    patient: activePatient,
+                                    session_events: nurseSessionEvents[activePatient.id] || []
+                                  })
+                                });
+                                if (!res.ok) throw new Error("IWS evaluation connection failure");
+                                const data = await res.json();
+                                if (setIwsEvaluations) {
+                                  setIwsEvaluations(prev => ({
+                                    ...prev,
+                                    [activePatient.id]: data
+                                  }));
+                                }
+                                if (data.divergence_flag && data.combined_alert && onAddCombinedAlert) {
+                                  onAddCombinedAlert(data.combined_alert);
+                                }
+                              } catch (err: any) {
+                                setIwsError(err.message || "IWS query crash");
+                              } finally {
+                                setIwsLoading(false);
+                              }
+                            }}
+                          >
+                            {iwsLoading ? "Calculating Worry Metric..." : "Evaluate Worry Metric (IWS)"}
+                          </Button>
+
+                          {/* IWS RESULTS WIDGET */}
+                          {iwsEvaluations[activePatient.id] && (
+                            <div className="space-y-2.5 p-3 rounded-lg bg-[#010408]/80 border border-slate-900 animate-[fadeIn_0.15s_ease]">
+                              <div className="flex justify-between items-center text-3xs font-mono">
+                                <span className="text-slate-400 uppercase">Worry Score:</span>
+                                <span className={`font-black uppercase tracking-widest text-[10px] ${
+                                  iwsEvaluations[activePatient.id].iws_score >= 3 ? "text-rose-500 animate-pulse" :
+                                  iwsEvaluations[activePatient.id].iws_score >= 2 ? "text-amber-500" : "text-emerald-400"
+                                }`}>
+                                  {iwsEvaluations[activePatient.id].iws_score}/4 ({iwsEvaluations[activePatient.id].iws_label})
+                                </span>
+                              </div>
+
+                              {/* Progress bar */}
+                              <div className="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden border border-slate-800">
+                                <div 
+                                  className={`h-full rounded-full transition-all duration-300 ${
+                                    iwsEvaluations[activePatient.id].iws_score >= 3 ? "bg-rose-500" :
+                                    iwsEvaluations[activePatient.id].iws_score === 2 ? "bg-amber-500" : "bg-emerald-400"
+                                  }`} 
+                                  style={{ width: `${(iwsEvaluations[activePatient.id].iws_score / 4) * 100}%` }}
+                                />
+                              </div>
+
+                              <div className="text-[10px] italic text-slate-300 leading-normal border-t border-slate-900/40 pt-1.5 font-sans font-medium">
+                                <strong>Evidence:</strong> {iwsEvaluations[activePatient.id].behavioral_evidence}
+                              </div>
+
+                              {/* Divergence warning card */}
+                              {iwsEvaluations[activePatient.id].divergence_flag && (
+                                <div className="p-2 bg-orange-950/25 border border-orange-500/25 rounded flex flex-col gap-1 text-[8.5px] font-mono leading-relaxed">
+                                  <div className="text-orange-400 font-bold uppercase flex items-center gap-1.5 animate-pulse">
+                                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                                    Divergence Alarm Triggered!
+                                  </div>
+                                  <div className="text-slate-350 uppercase leading-normal">
+                                    Nurse exhibits high subjective worry ({iwsEvaluations[activePatient.id].iws_score}/4) while automated client sensors report low threat ({activePatient.riskScore}% risk). Synchronized Combined Alert automatically dispatched to Doctor Dashboard.
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          {iwsError && <div className="text-3xs text-rose-450 font-mono text-center">{iwsError}</div>}
+                        </div>
+                      </div>
+                    </div>
                   </div>
 
                 </div>
@@ -607,67 +1031,108 @@ export default function NurseDashboard({
             <div className="bg-[#040811] border border-slate-900 rounded-2xl p-5 shadow-xl space-y-4">
               <div>
                 <h3 className="text-xs font-display tracking-widest text-cyan-400 uppercase font-black">
-                  Nursing Clinical Progress Progress Notes
+                  Nursing Clinical Progress Notes Registry
                 </h3>
-                <p className="text-3xs font-mono text-slate-500 uppercase mt-1">APPEND DETAILED ROTATION REPORTS TO SYSTEM RECORD</p>
+                <p className="text-3xs font-mono text-slate-500 uppercase mt-1">SELECT CURRENT PATIENT BED AND ROOM LOCATION TO CHRONICLE REPORT</p>
               </div>
 
-              {activePatient ? (
-                <div className="space-y-4">
-                  <div className="p-3 bg-slate-950 border border-slate-900 rounded-xl text-3xs font-mono uppercase text-slate-400 flex justify-between">
-                    <span>Active Case: <span className="text-white font-extrabold">{activePatient.name}</span></span>
-                    <span>Room Location: {activePatient.roomNumber}</span>
-                  </div>
-
-                  <textarea
-                    rows={6}
-                    value={newProgressNote}
-                    onChange={(e) => setNewProgressNote(e.target.value)}
-                    className="w-full bg-slate-950 text-slate-200 text-xs font-mono p-3 border border-slate-900 focus:border-cyan-500 rounded-xl focus:outline-none resize-none leading-relaxed"
-                    placeholder="Enter detailed shift progress metrics, hydration reviews, recovery scale observations..."
-                  />
-
-                  <Button variant="primary" size="md" onClick={handleSaveNotes} className="w-full">
-                    Commit Shift report Logs to patient history
-                  </Button>
+              {/* Patient & Room Selection Dropdowns (Match Request) */}
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 gap-2">
+                  <label className="text-3xs font-mono text-slate-500 uppercase">Select Target Patient Bed & Room location:</label>
+                  <select
+                    id="note-patient-dropdown"
+                    value={selectedNotePatientId}
+                    onChange={(e) => setSelectedNotePatientId(e.target.value)}
+                    className="w-full bg-[#02050b] text-slate-200 text-xs font-mono p-2.5 border border-slate-900 rounded-xl focus:outline-none focus:border-cyan-500 cursor-pointer"
+                  >
+                    {patients.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        ROOM {p.roomNumber} — {p.name} ({p.department})
+                      </option>
+                    ))}
+                  </select>
                 </div>
-              ) : (
-                <div className="py-12 border border-dashed border-slate-900 text-center text-3xs font-mono text-slate-550 uppercase">
-                  Select a roster patient to record progress dossiers
-                </div>
-              )}
+
+                {(() => {
+                  const targetNotePatient = patients.find(p => p.id === selectedNotePatientId) || activePatient;
+                  if (targetNotePatient) {
+                    return (
+                      <div className="space-y-4">
+                        <div className="p-3.5 bg-slate-950 border border-slate-900 rounded-xl text-3xs font-mono uppercase text-slate-400 flex flex-col sm:flex-row justify-between gap-2.5">
+                          <div>
+                            <span className="text-slate-500 block leading-none mb-1">RECORDING ACTION FOR:</span>
+                            <span className="text-white font-extrabold text-[11px] uppercase">{targetNotePatient.name}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-500 block leading-none mb-1">LOCATION & DEPT:</span>
+                            <span className="text-cyan-400 font-extrabold">BED ROOM {targetNotePatient.roomNumber} ({targetNotePatient.department})</span>
+                          </div>
+                        </div>
+
+                        <textarea
+                          rows={6}
+                          value={newProgressNote}
+                          onChange={(e) => setNewProgressNote(e.target.value)}
+                          className="w-full bg-slate-950 text-slate-200 text-xs font-mono p-3 border border-slate-900 focus:border-cyan-500 rounded-xl focus:outline-none resize-none leading-relaxed"
+                          placeholder="Enter detailed shift progress metrics, hydration reviews, mental status index, recovery scale observations..."
+                        />
+
+                        <Button variant="primary" size="md" onClick={handleSaveNotes} className="w-full py-2.5">
+                          Commit Shift Report Logs to Client Dossier
+                        </Button>
+                      </div>
+                    );
+                  } else {
+                    return (
+                      <div className="py-12 border border-dashed border-slate-900 text-center text-3xs font-mono text-slate-550 uppercase">
+                        Select a target bedside roster patient above to record progress notes
+                      </div>
+                    );
+                  }
+                })()}
+              </div>
             </div>
 
             {/* Note logs History timeline list */}
             <div className="bg-[#040811] border border-slate-900 rounded-2xl p-5 shadow-xl space-y-4 font-mono text-3xs">
-              <div>
-                <h3 className="text-xs font-display tracking-widest text-white uppercase font-black">
-                  Historical progress reports history
-                </h3>
-                <p className="text-3xs text-slate-500 uppercase mt-1">LOGGED REPORTS FOR CHOSEN PATIENT ID</p>
-              </div>
+              {(() => {
+                const targetNotePatient = patients.find(p => p.id === selectedNotePatientId) || activePatient;
+                if (targetNotePatient) {
+                  return (
+                    <>
+                      <div>
+                        <h3 className="text-xs font-display tracking-widest text-white uppercase font-black">
+                          Historical clinical notes list
+                        </h3>
+                        <p className="text-3xs text-slate-500 uppercase mt-1">LOGGED REPORTS FOR {targetNotePatient.name.toUpperCase()} (ID: {targetNotePatient.id})</p>
+                      </div>
 
-              {activePatient ? (
-                <div className="space-y-2.5 max-h-[360px] overflow-y-auto pr-1">
-                  {activePatient.timeline.filter(t => t.type === "note" || t.type === "treatment").length === 0 ? (
-                    <p className="text-slate-600 italic py-4 uppercase">No care reports recorded on this admission.</p>
-                  ) : (
-                    activePatient.timeline
-                      .filter(t => t.type === "note" || t.type === "treatment")
-                      .map((t) => (
-                        <div key={t.id} className="p-3 bg-slate-950 rounded-xl border border-slate-900 relative">
-                          <span className="text-slate-500 absolute top-2 right-3 font-bold">TIME: {t.time}</span>
-                          <span className="text-cyan-400 uppercase font-bold block mb-1">LOG ENTRY</span>
-                          <p className="text-slate-350 leading-relaxed font-semibold uppercase">{t.event}</p>
-                        </div>
-                      ))
-                  )}
-                </div>
-              ) : (
-                <div className="py-12 text-center text-slate-550 uppercase">
-                  No active progress logs
-                </div>
-              )}
+                      <div className="space-y-2.5 max-h-[365px] overflow-y-auto pr-1">
+                        {targetNotePatient.timeline.filter(t => t.type === "note" || t.type === "treatment").length === 0 ? (
+                          <p className="text-slate-600 italic py-4 uppercase">No clinical progress notes yet filed on this intake ledger.</p>
+                        ) : (
+                          targetNotePatient.timeline
+                            .filter(t => t.type === "note" || t.type === "treatment")
+                            .map((t) => (
+                              <div key={t.id} className="p-3 bg-slate-950 rounded-xl border border-slate-900 relative">
+                                <span className="text-slate-500 absolute top-2 right-3 font-bold">TIME: {t.time}</span>
+                                <span className="text-cyan-400 uppercase font-black block mb-1">BEDROOM: {targetNotePatient.roomNumber} // LOG RECORD</span>
+                                <p className="text-slate-300 leading-relaxed font-semibold uppercase">{t.event}</p>
+                              </div>
+                            ))
+                        )}
+                      </div>
+                    </>
+                  );
+                } else {
+                  return (
+                    <div className="py-12 text-center text-slate-550 uppercase">
+                      No active progress logs history retrieved. Select a patient.
+                    </div>
+                  );
+                }
+              })()}
             </div>
           </motion.div>
         )}

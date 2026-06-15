@@ -7,14 +7,17 @@ interface PatientDetailsProps {
   patient: Patient;
   onBack: () => void;
   onUpdatePatientIncident: (patientId: string, incident: IncidentReport) => void;
+  onRecommendDischarge?: (patientId: string, reason: string) => void;
 }
 
 export default function PatientDetails({
   patient,
   onBack,
-  onUpdatePatientIncident
+  onUpdatePatientIncident,
+  onRecommendDischarge
 }: PatientDetailsProps) {
   const [activeTab, setActiveTab] = useState<"vitals" | "prediction" | "timeline">("vitals");
+  const [recommendReason, setRecommendReason] = useState("");
   
   // States for Gemini AI Decision Co-Pilot integration
   const [aiLoading, setAiLoading] = useState(false);
@@ -603,6 +606,66 @@ export default function PatientDetails({
             )}
 
           </div>
+
+          {/* PHYSICIAN DISCHARGE / DISPOSITION MODULE */}
+          {onRecommendDischarge && (
+            <div className="bg-[#0b1222]/95 border border-slate-850 rounded-xl p-5 space-y-3.5">
+              <div>
+                <h3 className="text-xs font-display tracking-widest text-[#f5f6fa] uppercase font-black">
+                  ⚕️ Physician Discharge disposition
+                </h3>
+                <p className="text-3xs font-mono text-slate-500 uppercase mt-0.5">
+                  RELEASE AND COMMAND TRANSFER CLEARANCE INTERFACE
+                </p>
+              </div>
+
+              {patient.dischargeRecommended ? (
+                <div className="p-4 bg-amber-950/25 border border-amber-500/20 rounded-xl space-y-2 text-left">
+                  <span className="text-3xs font-mono font-bold text-amber-500 uppercase tracking-widest flex items-center gap-1.5 animate-pulse">
+                    <CheckCircle className="h-4 w-4 text-amber-500 shrink-0" />
+                    DISCHARGE RECOMMENDATION FILED
+                  </span>
+                  <p className="text-3xs font-mono text-slate-300 leading-normal uppercase">
+                    <strong>Physician rationale logged:</strong> "{patient.dischargeRecommendationReason}"
+                  </p>
+                  <p className="text-[10px] font-sans text-slate-450 leading-relaxed italic border-t border-slate-900 pt-2 mt-1">
+                    The patient's bed status is highlighted in orange. Safe discharge removal has been dispatched to the Admin lobby for final supervisor verification clearance.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3 text-left">
+                  <p className="text-3xs font-sans text-slate-400 leading-normal uppercase">
+                    Attending doctors can lodge a clinical recommendation for discharge when telemetry fluctuations settle. This registers their release on the central Admin Registry.
+                  </p>
+                  
+                  <textarea
+                    rows={3}
+                    value={recommendReason}
+                    onChange={(e) => setRecommendReason(e.target.value)}
+                    className="w-full bg-slate-950 text-slate-200 text-xs font-mono p-3 border border-slate-900 focus:border-cyan-500 rounded-xl focus:outline-none resize-none leading-relaxed"
+                    placeholder="Enter discharge rationale (vitals nominal, medication complete, scheduled step-down)..."
+                  />
+
+                  <button
+                    id="submit-discharge-rec-btn"
+                    type="button"
+                    onClick={() => {
+                      if (!recommendReason.trim()) {
+                        alert("Please supply a valid clinical rationale for discharge recommendation.");
+                        return;
+                      }
+                      onRecommendDischarge(patient.id, recommendReason);
+                      setRecommendReason("");
+                      alert("Successfully submitted Discharge recommendation. Case registered on central Admin Board.");
+                    }}
+                    className="w-full py-2 rounded-lg bg-[#0a2034] hover:bg-cyan-950/40 border border-cyan-500/30 text-cyan-400 hover:text-cyan-300 font-mono text-xs uppercase transition-all tracking-wider cursor-pointer"
+                  >
+                    File Discharge Recommendation
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
         </div>
 

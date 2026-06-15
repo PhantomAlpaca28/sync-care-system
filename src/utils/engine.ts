@@ -421,7 +421,7 @@ export function executeScenarioAction(
         count++;
       }
     }
-  } else if (scenarioType === "oxygen_collapse") {
+  } else if (targetType === "oxygen_collapse") {
     // Respiratory collapse in 4 patients (ICU & General Wards)
     let count = 0;
     for (let i = 0; i < updatedPatients.length; i++) {
@@ -461,7 +461,7 @@ export function executeScenarioAction(
         count++;
       }
     }
-  } else if (scenarioType === "high_fever") {
+  } else if (targetType === "high_fever") {
     // Sepsis protocol activation
     let count = 0;
     for (let i = 0; i < updatedPatients.length; i++) {
@@ -503,7 +503,7 @@ export function executeScenarioAction(
         count++;
       }
     }
-  } else if (scenarioType === "multiple_emergency") {
+  } else if (targetType === "multiple_emergency") {
     // Collapse 6 randomized patients to critical states immediately
     let count = 0;
     for (let i = 0; i < updatedPatients.length && count < 6; i++) {
@@ -546,7 +546,7 @@ export function executeScenarioAction(
         count++;
       }
     }
-  } else if (scenarioType === "icu_overload") {
+  } else if (targetType === "icu_overload") {
     // Force ICU beds to deteriorate and trigger overflow capacity calculations
     let count = 0;
     for (let i = 0; i < updatedPatients.length; i++) {
@@ -586,7 +586,7 @@ export function executeScenarioAction(
         count++;
       }
     }
-  } else if (scenarioType === "blood_shortage_crisis") {
+  } else if (targetType === "blood_shortage_crisis") {
     // Sets blood levels to extremely low, creating a system-wide flag
     bloodEffect = { oNegDrop: true, shortageActive: true };
     // Force some patient to need blood urgently to cause direct matchmaking emergency
@@ -604,7 +604,7 @@ export function executeScenarioAction(
         break;
       }
     }
-  } else if (scenarioType === "mass_casualty") {
+  } else if (targetType === "mass_casualty") {
     // Mass disaster in Emergency Ward - convert 5 Emergency patients to Critical Trauma cases
     let count = 0;
     for (let i = 0; i < updatedPatients.length; i++) {

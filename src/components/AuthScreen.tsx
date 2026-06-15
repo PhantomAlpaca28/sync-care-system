@@ -17,6 +17,10 @@ const NURSE_ACCOUNTS = [
   { name: "Nurse Rahul Das", staffId: "NUR002", department: "Emergency & General", passcode: "5678" }
 ];
 
+const ADMIN_ACCOUNTS = [
+  { name: "Admin Supervisor", staffId: "ADM001", department: "Hospital Operations", passcode: "9999" }
+];
+
 export default function AuthScreen({ onLoginSuccess }: AuthProps) {
   const [selectedRole, setSelectedRole] = useState<UserRole>("doctor");
   const [typedStaffId, setTypedStaffId] = useState("DOC001");
@@ -37,17 +41,21 @@ export default function AuthScreen({ onLoginSuccess }: AuthProps) {
       setTypedStaffId("DOC001");
       setSelectedName("Dr. Arjun Kumar");
       setPasscode("1234");
-    } else {
+    } else if (role === "nurse") {
       setTypedStaffId("NUR001");
       setSelectedName("Nurse Meera Joseph");
       setPasscode("5678");
+    } else {
+      setTypedStaffId("ADM001");
+      setSelectedName("Admin Supervisor");
+      setPasscode("9999");
     }
   };
 
   const handleStaffSelect = (staffId: string) => {
     setTypedStaffId(staffId);
     setErrorMsg("");
-    const pool = selectedRole === "doctor" ? DOCTOR_ACCOUNTS : NURSE_ACCOUNTS;
+    const pool = selectedRole === "doctor" ? DOCTOR_ACCOUNTS : selectedRole === "nurse" ? NURSE_ACCOUNTS : ADMIN_ACCOUNTS;
     const match = pool.find(item => item.staffId === staffId);
     if (match) {
       setSelectedName(match.name);
@@ -60,9 +68,9 @@ export default function AuthScreen({ onLoginSuccess }: AuthProps) {
     setErrorMsg("");
 
     const normalizedId = typedStaffId.trim().toUpperCase();
-    const pool = selectedRole === "doctor" ? DOCTOR_ACCOUNTS : NURSE_ACCOUNTS;
+    const pool = selectedRole === "doctor" ? DOCTOR_ACCOUNTS : selectedRole === "nurse" ? NURSE_ACCOUNTS : ADMIN_ACCOUNTS;
     const matchedAccount = pool.find(
-      (acc) => acc.staffId === normalizedId && acc.name.toLowerCase() === selectedName.toLowerCase()
+      (acc) => acc.staffId === normalizedId
     );
 
     if (!matchedAccount) {
@@ -157,14 +165,14 @@ export default function AuthScreen({ onLoginSuccess }: AuthProps) {
           <div className="text-[10px] font-mono tracking-wider text-slate-400 uppercase mb-2 text-left">
             Select Clearance Duty Role:
           </div>
-          <div className="grid grid-cols-2 gap-3 mb-6">
-            {(["doctor", "nurse"] as UserRole[]).map((role) => (
+          <div className="grid grid-cols-3 gap-2 mb-6">
+            {(["doctor", "nurse", "admin"] as UserRole[]).map((role) => (
               <button
                 key={role}
                 id={`role-btn-${role}`}
                 type="button"
                 onClick={() => handleRoleSelect(role)}
-                className={`flex items-center justify-center gap-2 py-3 px-4 rounded-xl border text-center transition-all cursor-pointer ${
+                className={`flex flex-col items-center justify-center gap-1.5 py-2.5 px-2 rounded-xl border text-center transition-all cursor-pointer ${
                   selectedRole === role
                     ? "bg-[#0b1b2d] border-cyan-500 text-white shadow-[0_0_12px_rgba(0,240,255,0.08)]"
                     : "bg-[#04070c] border-slate-900 text-slate-500 hover:text-slate-350 hover:border-slate-800"
@@ -172,11 +180,13 @@ export default function AuthScreen({ onLoginSuccess }: AuthProps) {
               >
                 {role === "doctor" ? (
                   <ShieldCheck className={`h-4 w-4 ${selectedRole === role ? "text-cyan-400" : "text-slate-600"}`} />
-                ) : (
+                ) : role === "nurse" ? (
                   <UserCheck className={`h-4 w-4 ${selectedRole === role ? "text-cyan-400" : "text-slate-600"}`} />
+                ) : (
+                  <Building className={`h-4 w-4 ${selectedRole === role ? "text-cyan-400" : "text-slate-600"}`} />
                 )}
-                <span className="text-2xs font-mono uppercase tracking-widest font-black">
-                  {role} PORTAL
+                <span className="text-[7.5px] font-mono uppercase tracking-widest font-black leading-none">
+                  {role}
                 </span>
               </button>
             ))}
@@ -201,10 +211,14 @@ export default function AuthScreen({ onLoginSuccess }: AuthProps) {
                     <option value="DOC001">Dr. Arjun Kumar (Staff ID: DOC001)</option>
                     <option value="DOC002">Dr. Priya Sharma (Staff ID: DOC002)</option>
                   </>
-                ) : (
+                ) : selectedRole === "nurse" ? (
                   <>
                     <option value="NUR001">Nurse Meera Joseph (Staff ID: NUR001)</option>
                     <option value="NUR002">Nurse Rahul Das (Staff ID: NUR002)</option>
+                  </>
+                ) : (
+                  <>
+                    <option value="ADM001">Admin Supervisor (Staff ID: ADM001)</option>
                   </>
                 )}
               </select>
@@ -213,13 +227,13 @@ export default function AuthScreen({ onLoginSuccess }: AuthProps) {
             {/* Display matched Full Name (calculated or typed) */}
             <div className="bg-[#04070c] border border-slate-900/60 p-3 rounded-lg flex items-center justify-between">
               <div className="text-left">
-                <span className="text-[8px] font-mono uppercase text-slate-505 block leading-none mb-1">Assigned Name</span>
+                <span className="text-[8px] font-mono uppercase text-slate-500 block leading-none mb-1">Assigned Name</span>
                 <span className="text-xs font-mono font-black text-cyan-400">{selectedName}</span>
               </div>
               <div className="text-right">
-                <span className="text-[8px] font-mono uppercase text-slate-505 block leading-none mb-1">System Sector</span>
+                <span className="text-[8px] font-mono uppercase text-slate-500 block leading-none mb-1">System Sector</span>
                 <span className="text-[10px] font-mono font-black text-slate-300">
-                  {selectedRole === "doctor" ? "ICU & CARDIOLOGY Wards" : "EMERGENCY & Wards"}
+                  {selectedRole === "doctor" ? "ICU & CARDIOLOGY Wards" : selectedRole === "nurse" ? "EMERGENCY & Wards" : "OPS MANAGEMENT"}
                 </span>
               </div>
             </div>

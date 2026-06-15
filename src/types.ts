@@ -1,4 +1,4 @@
-export type UserRole = "doctor" | "nurse";
+export type UserRole = "doctor" | "nurse" | "admin";
 
 export interface UserSession {
   username: string;
@@ -67,6 +67,8 @@ export interface Patient {
   prediction: AIPrediction | null;
   incidents: IncidentReport[];
   timeline: MedicalTimelineItem[];
+  dischargeRecommended?: boolean;
+  dischargeRecommendationReason?: string;
 }
 
 export interface AlertNotification {

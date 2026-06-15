@@ -52,6 +52,8 @@ interface DoctorDashboardProps {
   bloodRequests: BloodRequest[];
   bloodDonations: BloodDonation[];
   shiftActivities: any[];
+  combinedDoctorAlerts?: any[];
+  onClearCombinedAlert?: (patientId: string) => void;
   onSelectPatient: (patient: Patient) => void;
   onAcknowledgeAlert: (id: string) => void;
   onTriggerScenario: (id: string) => void;
@@ -67,6 +69,8 @@ export default function DoctorDashboard({
   bloodRequests,
   bloodDonations,
   shiftActivities,
+  combinedDoctorAlerts = [],
+  onClearCombinedAlert,
   onSelectPatient,
   onAcknowledgeAlert,
   onTriggerScenario,
@@ -401,6 +405,108 @@ export default function DoctorDashboard({
                     </Table>
                   </div>
                 </div>
+
+                {/* Dual-System Divergent alarms list */}
+                {combinedDoctorAlerts && combinedDoctorAlerts.length > 0 && (
+                  <div className="bg-[#0c0603] border border-orange-500/30 rounded-2xl p-5 shadow-2xl relative overflow-hidden animate-[pulse_3s_infinite] border-l-4 border-l-orange-500 mb-6">
+                    <div className="absolute top-0 right-0 p-3">
+                      <span className="text-[8px] font-mono bg-orange-500 text-black px-1.5 py-0.5 rounded font-black uppercase tracking-widest animate-pulse">
+                        Divergence Alarm
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2 mb-3">
+                      <AlertTriangle className="h-5 w-5 text-orange-500 animate-bounce" />
+                      <h3 className="text-2xs font-display tracking-widest text-[#f97316] uppercase font-black font-sans">
+                        System 2: Implicit Worry (IWS) Divergent Alarms
+                      </h3>
+                    </div>
+
+                    <div className="space-y-3.5">
+                      {combinedDoctorAlerts.map((alert: any, idx: number) => {
+                        const pat = patients.find(p => p.id === alert.patient_id);
+                        return (
+                          <div key={idx} className="bg-slate-950 p-4 border border-orange-500/10 rounded-xl space-y-3">
+                            <div className="flex justify-between items-start border-b border-slate-900/80 pb-2">
+                              <div>
+                                <span className="text-[10px] font-mono text-cyan-400 font-extrabold uppercase">
+                                  Bed Room: {pat?.roomNumber || "ER-102"} // {pat?.department || "Emergency"}
+                                </span>
+                                <h4 className="text-sm font-bold text-white uppercase mt-0.5">
+                                  {pat?.name || "Evelyn Sterling"}
+                                </h4>
+                              </div>
+                              <div className="text-right">
+                                <span className="text-[8.5px] text-slate-500 block uppercase">Sensor Risk</span>
+                                <span className="text-xs font-mono font-bold text-emerald-450">{pat?.riskScore || 35}% Risk</span>
+                              </div>
+                            </div>
+
+                            <div className="text-2xs space-y-2">
+                              <div>
+                                <strong className="text-[#f97316] uppercase font-mono block mb-1">Clinical Incongruity Summary:</strong>
+                                <p className="text-slate-300 font-sans font-medium leading-relaxed">{alert.doctor_summary}</p>
+                              </div>
+                              <div>
+                                <strong className="text-[#06b6d4] uppercase font-mono block mb-1">Recommended Clinical Action:</strong>
+                                <p className="text-slate-100 font-sans font-semibold leading-relaxed bg-[#0c1822]/40 p-2.5 rounded border border-slate-900/60 text-white">{alert.recommended_action}</p>
+                              </div>
+                            </div>
+
+                            {/* Show CRE computed remedies directly inside the alert panel for the Doctor! */}
+                            {alert.reversal_options && alert.reversal_options.length > 0 && (
+                              <div className="pt-2.5 border-t border-slate-900/60 space-y-2">
+                                <span className="text-[9px] font-mono text-purple-400 uppercase font-black tracking-wider flex items-center gap-1">
+                                  <Layers className="h-3 w-3 text-purple-400" /> CRE Remediation Matrix Available:
+                                </span>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                                  {alert.reversal_options.map((opt: any, optIdx: number) => (
+                                    <div key={optIdx} className="bg-[#030712] border border-slate-900 p-2 rounded text-[8px] font-mono space-y-1">
+                                      <div className="flex justify-between font-bold text-white uppercase text-[7.5px]">
+                                        <span>{opt.label}</span>
+                                        <span className="text-[#0891b2]">{opt.priority}</span>
+                                      </div>
+                                      <p className="text-[7.5px] text-slate-400 italic font-sans leading-snug">{opt.rationale}</p>
+                                      <div className="text-[7.5px] text-slate-300 border-t border-slate-900/40 pt-1">
+                                        Action Time: <strong className="text-white">{opt.time_estimate_minutes} min</strong>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            <div className="flex justify-end gap-2 pt-2 border-t border-[#0f172a]">
+                              <Button 
+                                variant="ghost" 
+                                size="xs" 
+                                className="text-[9px] uppercase font-mono py-1 font-bold"
+                                onClick={() => {
+                                  if (pat) onSelectPatient(pat);
+                                }}
+                              >
+                                Review Patient dossier
+                              </Button>
+                              <Button 
+                                variant="cyan" 
+                                size="xs" 
+                                className="text-[9px] uppercase font-mono py-1 text-black font-black bg-orange-500 hover:bg-orange-600 border-none"
+                                onClick={() => {
+                                  if (onClearCombinedAlert) {
+                                    onClearCombinedAlert(alert.patient_id);
+                                    window.alert(`Divergent Shift Alarm acknowledged. Medical response logged for Room ${pat?.roomNumber || "Bed"}.`);
+                                  }
+                                }}
+                              >
+                                Dispatched Bedside Exam (Resolve)
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 {/* 2. Critical Alert Logs list */}
                 <div className="bg-[#040811] border border-slate-900 rounded-2xl p-5 shadow-xl">

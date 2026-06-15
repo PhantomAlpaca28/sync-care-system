@@ -5,6 +5,7 @@ import AuthScreen from "./components/AuthScreen";
 import DoctorDashboard from "./components/DoctorDashboard";
 import NurseDashboard from "./components/NurseDashboard";
 import PatientDetails from "./components/PatientDetails";
+import AdminDashboard from "./components/AdminDashboard";
 import { Activity, LogOut, RefreshCw } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -66,6 +67,11 @@ export default function App() {
     { id: "sh_act_2", time: "22:45:00", type: "task_complete", message: "Blood request #req_002 for Bed ER-201 approved and transfused." },
     { id: "sh_act_3", time: "22:00:00", type: "med_administered", message: "Patient Evelyn Sterling administered IV Amiodarone 150mg." }
   ]);
+
+  // Shared Clinical Worry & Counterfactual Reversal system coordinates
+  const [nurseSessionEvents, setNurseSessionEvents] = useState<Record<string, any[]>>({});
+  const [iwsEvaluations, setIwsEvaluations] = useState<Record<string, any>>({});
+  const [combinedDoctorAlerts, setCombinedDoctorAlerts] = useState<any[]>([]);
 
   // Systems live ticker and clock
   const [currentTimeStr, setCurrentTimeStr] = useState("");
@@ -209,6 +215,37 @@ export default function App() {
             event: `AI CLINICAL SEVERITY ASSESSMENT GENERATED: ${incident.causeAnalysis.substring(0, 60)}...`,
             type: "note",
             category: "success"
+          }, ...p.timeline]
+        };
+      }
+      return p;
+    }));
+  };
+
+  const handleAddPatient = (newPatient: Patient) => {
+    setPatients(current => [...current, newPatient]);
+  };
+
+  const handleRemovePatient = (patientId: string) => {
+    setPatients(current => current.filter(p => p.id !== patientId));
+    if (selectedPatientId === patientId) {
+      setSelectedPatientId(null);
+    }
+  };
+
+  const handleRecommendDischarge = (patientId: string, reason: string) => {
+    setPatients(current => current.map(p => {
+      if (p.id === patientId) {
+        return {
+          ...p,
+          dischargeRecommended: true,
+          dischargeRecommendationReason: reason,
+          timeline: [{
+            id: `t_discharge_rec_${Date.now()}`,
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            event: `DOCTOR RECOMMENDED DISCHARGE PROTOCOL // ATTENDING PHYSICIAN RATIONALE: ${reason}`,
+            type: "note",
+            category: "warning"
           }, ...p.timeline]
         };
       }
@@ -457,6 +494,7 @@ export default function App() {
                 patient={activePatientDossier}
                 onBack={() => setSelectedPatientId(null)}
                 onUpdatePatientIncident={handleUpdatePatientIncident}
+                onRecommendDischarge={handleRecommendDischarge}
               />
             </motion.div>
           ) : (
@@ -477,6 +515,8 @@ export default function App() {
                   bloodRequests={bloodRequests}
                   bloodDonations={bloodDonations}
                   shiftActivities={shiftActivities}
+                  combinedDoctorAlerts={combinedDoctorAlerts}
+                  onClearCombinedAlert={(id: string) => setCombinedDoctorAlerts(current => current.filter(x => x.patient_id !== id))}
                   onSelectPatient={(p) => setSelectedPatientId(p.id)}
                   onAcknowledgeAlert={handleAcknowledgeAlert}
                   onTriggerScenario={handleTriggerScenario}
@@ -484,17 +524,39 @@ export default function App() {
                   onReplenishBloodStock={handleReplenishStock}
                   onAddDonation={handleAddDonation}
                 />
-              ) : (
+              ) : session.role === "nurse" ? (
                 <NurseDashboard
                   patients={patients}
                   alerts={alerts}
                   bloodRequests={bloodRequests}
                   currentNurse={session.username}
                   currentNurseId={session.staffId}
+                  nurseSessionEvents={nurseSessionEvents}
+                  setNurseSessionEvents={setNurseSessionEvents}
+                  iwsEvaluations={iwsEvaluations}
+                  setIwsEvaluations={setIwsEvaluations}
+                  combinedDoctorAlerts={combinedDoctorAlerts}
+                  onAddCombinedAlert={(newAlert: any) => {
+                    setCombinedDoctorAlerts((current) => {
+                      const exists = current.some((a) => a.patient_id === newAlert.patient_id);
+                      if (exists) {
+                        return current.map(a => a.patient_id === newAlert.patient_id ? newAlert : a);
+                      }
+                      return [newAlert, ...current];
+                    });
+                  }}
                   onSelectPatient={(p) => setSelectedPatientId(p.id)}
                   onAddPatientTimelineNote={handleAddPatientTimelineNote}
                   onAcknowledgeAlert={handleAcknowledgeAlert}
                   onCreateBloodRequest={handleCreateBloodRequest}
+                />
+              ) : (
+                <AdminDashboard
+                  patients={patients}
+                  onAddPatient={handleAddPatient}
+                  onRemovePatient={handleRemovePatient}
+                  session={session}
+                  onLogout={() => setSession(null)}
                 />
               )}
 
