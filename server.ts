@@ -30,6 +30,37 @@ function getGeminiClient(): GoogleGenAI {
   return aiClient;
 }
 
+// Helper to clean markdown code blocks around JSON from model outputs
+function cleanAndParseJson(text: string | undefined): any {
+  if (!text) return {};
+  let clean = text.trim();
+  if (clean.startsWith("```")) {
+    const lines = clean.split("\n");
+    if (lines[0].startsWith("```")) {
+      lines.shift();
+    }
+    if (lines[lines.length - 1].startsWith("```")) {
+      lines.pop();
+    }
+    clean = lines.join("\n").trim();
+  }
+  try {
+    return JSON.parse(clean);
+  } catch (err) {
+    const startIdx = clean.indexOf("{");
+    const endIdx = clean.lastIndexOf("}");
+    if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+      const jsonCandidate = clean.substring(startIdx, endIdx + 1);
+      try {
+        return JSON.parse(jsonCandidate);
+      } catch (nestedErr) {
+        throw new Error("Could not parse JSON from model output: " + text);
+      }
+    }
+    throw err;
+  }
+}
+
 // REST Endpoint: Gemini AI Clinical Insight Generator
 app.post("/api/gemini/healthcare-insight", async (req, res) => {
   try {
@@ -100,7 +131,7 @@ Perform clinical analysis:
       }
     });
 
-    const parsedJson = JSON.parse(response.text?.trim() || "{}");
+    const parsedJson = cleanAndParseJson(response.text);
     res.json(parsedJson);
 
   } catch (err: any) {
@@ -289,7 +320,7 @@ Patient Details:
         }
       });
 
-      const parsed = JSON.parse(response.text?.trim() || "{}");
+      const parsed = cleanAndParseJson(response.text);
       return res.json(parsed);
 
     } catch (apiErr: any) {
@@ -438,11 +469,11 @@ app.post("/api/clinical/evaluate-iws", async (req, res) => {
     }
 
     const iwsResult = calculateIwsScoreAndEvidence(session_events);
-    const divergenceFlag = iwsResult.score >= 2 && patient.riskScore < 55;
+    const divergenceFlag = iwsResult.score >= 2 && patient.riskScore < 75;
 
     let combinedAlert: any = null;
 
-    if (divergenceFlag && iwsResult.score >= 3) {
+    if (divergenceFlag) {
       try {
         const hasApiKey = !(!process.env.GEMINI_API_KEY);
         if (!hasApiKey) {
@@ -453,7 +484,7 @@ app.post("/api/clinical/evaluate-iws", async (req, res) => {
 
         const systemContext = `You are the clinical AI core of CareSync. Generate a combined high-priority alarm for the Doctor Dashboard based on:
 SYSTEM 2: IMPLICIT WORRY SIGNAL (IWS) -> Nurse's behavioral worry score is elevated/high.
-AND the patient's sensors show normal/mild status (<55% risk), causing a major divergence.
+AND the patient's sensors show normal/mild status (<75% risk), causing a major divergence.
 
 Output format (strict JSON):
 {
@@ -510,7 +541,7 @@ Active Medications: None`;
           }
         });
 
-        combinedAlert = JSON.parse(response.text?.trim() || "{}");
+        combinedAlert = cleanAndParseJson(response.text);
         combinedAlert.combined_alert = true;
         combinedAlert.patient_id = patient.id;
 

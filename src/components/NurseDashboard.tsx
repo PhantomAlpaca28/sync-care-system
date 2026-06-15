@@ -49,6 +49,7 @@ interface NurseDashboardProps {
   onAddPatientTimelineNote: (patientId: string, noteText: string) => void;
   onAcknowledgeAlert: (id: string) => void;
   onCreateBloodRequest: (patientId: string, bloodGroup: any, units: number, urgency: any) => void;
+  onDeployReversalProtocol?: (patientId: string, protocolLabel: string, predictedRiskAfter: number, interventions: string[]) => void;
 }
 
 export default function NurseDashboard({
@@ -66,7 +67,8 @@ export default function NurseDashboard({
   onSelectPatient,
   onAddPatientTimelineNote,
   onAcknowledgeAlert,
-  onCreateBloodRequest
+  onCreateBloodRequest,
+  onDeployReversalProtocol
 }: NurseDashboardProps) {
   // Navigation tabs for nurse
   const [activeTab, setActiveTab] = useState<"patients" | "tasks" | "notes" | "blood" | "shift">("patients");
@@ -131,10 +133,13 @@ export default function NurseDashboard({
   useEffect(() => {
     if (activePatient) {
       setSelectedNotePatientId(activePatient.id);
+      // Reset Counterfactual Reversal Engine results to avoid stale data between patients
+      setCreResult(null);
+      setCreError("");
     } else if (patients.length > 0 && !selectedNotePatientId) {
       setSelectedNotePatientId(patients[0].id);
     }
-  }, [activePatient, patients]);
+  }, [activePatient?.id]);
 
   // Alarms related only to this nurse's assigned patients
   const assignedAlerts = useMemo(() => {
@@ -301,6 +306,35 @@ export default function NurseDashboard({
     setNewProgressNote("");
   };
 
+  const handleDiscardNotes = () => {
+    const targetPatient = patients.find(p => p.id === selectedNotePatientId) || activePatient;
+    if (!targetPatient) return;
+
+    if (newProgressNote.trim()) {
+      if (setNurseSessionEvents) {
+        setNurseSessionEvents(prev => {
+          const events = prev[targetPatient.id] || [];
+          const updated = [...events, {
+            event_type: "note_abandoned",
+            timestamp: new Date().toISOString(),
+            duration_seconds: Math.floor(Math.random() * 30) + 15,
+            action_taken: false
+          }].slice(-15);
+          return { ...prev, [targetPatient.id]: updated };
+        });
+      }
+      
+      setShiftLogs(prev => [
+        { id: `sl_discard_${Date.now()}`, time: new Date().toLocaleTimeString(), type: "warning", message: `DISCARDED progress report draft for Room ${targetPatient.roomNumber} (${targetPatient.name}). Inferred System 2 worry.` },
+        ...prev
+      ]);
+      alert(`Shift progress report draft was safely discarded/abandoned for ${targetPatient.name}. Note abandonment logged for System 2 analysis.`);
+    } else {
+      alert("Note is empty, nothing to discard.");
+    }
+    setNewProgressNote("");
+  };
+
   const selectPatientWithTracking = (patId: string) => {
     setSelectedPatientId(patId);
 
@@ -441,7 +475,7 @@ export default function NurseDashboard({
                         <div className="text-right">
                           <span className="text-3xs text-slate-500 block block uppercase mt-1 leading-none">Risk</span>
                           <span className={`text-xs font-mono font-black ${
-                            p.riskScore > 80 ? "text-rose-500 font-black animate-pulse" : p.riskScore > 65 ? "text-orange-400" : "text-emerald-450"
+                            p.riskScore > 80 ? "text-rose-500 font-black animate-pulse" : p.riskScore > 65 ? "text-orange-400" : "text-emerald-400"
                           }`}>{p.riskScore}/100</span>
                         </div>
                       </button>
@@ -463,7 +497,7 @@ export default function NurseDashboard({
                         <span className="text-3xs font-mono text-cyan-400 bg-cyan-950/20 px-1.5 py-0.5 border border-cyan-500/10 rounded">
                           Bed Location: R: {activePatient.roomNumber} ({activePatient.department})
                         </span>
-                        <span className="text-3xs font-mono text-slate-550 uppercase">PAT_ID: {activePatient.id} // BLOOD GROUP: {activePatient.bloodGroup}</span>
+                        <span className="text-3xs font-mono text-slate-500 uppercase">PAT_ID: {activePatient.id} // BLOOD GROUP: {activePatient.bloodGroup}</span>
                       </div>
                       <h3 className="text-sm font-display font-black text-white uppercase tracking-wide mt-1">
                         {activePatient.name}
@@ -479,36 +513,36 @@ export default function NurseDashboard({
                   {/* Vitals widget cards grid */}
                   <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                     <div className="bg-slate-950 p-3 border border-slate-900 rounded-xl text-center">
-                      <span className="text-slate-550 text-3xs uppercase block">Heart rate</span>
+                      <span className="text-slate-500 text-3xs uppercase block">Heart rate</span>
                       <Heart className="h-4 w-4 mx-auto text-rose-500 animate-pulse my-1.5" />
                       <span className="text-md font-mono font-bold text-white block">{activePatient.vitals.heartRate}</span>
                       <span className="text-3xs text-slate-500 font-mono font-bold leading-none block mt-0.5">BPM</span>
                     </div>
 
                     <div className="bg-slate-950 p-3 border border-slate-900 rounded-xl text-center">
-                      <span className="text-slate-550 text-3xs uppercase block">SpO₂ CONTENT</span>
+                      <span className="text-slate-500 text-3xs uppercase block">SpO₂ CONTENT</span>
                       <Activity className="h-4 w-4 mx-auto text-cyan-400 my-1.5" />
                       <span className="text-md font-mono font-bold text-cyan-400 block">{activePatient.vitals.spo2}%</span>
-                      <span className="text-3xs text-slate-550 font-mono font-bold leading-none block mt-0.5">Oxygen</span>
+                      <span className="text-3xs text-slate-500 font-mono font-bold leading-none block mt-0.5">Oxygen</span>
                     </div>
 
                     <div className="bg-slate-950 p-3 border border-slate-900 rounded-xl text-center">
-                      <span className="text-slate-550 text-3xs uppercase block">Blood pressure</span>
+                      <span className="text-slate-500 text-3xs uppercase block">Blood pressure</span>
                       <Droplet className="h-4 w-4 mx-auto text-purple-400 my-1.5" />
                       <span className="text-md font-mono font-bold text-white block">{activePatient.vitals.systolicBP}/{activePatient.vitals.diastolicBP}</span>
                       <span className="text-3xs text-slate-500 font-mono font-bold leading-none block mt-0.5">mmHg</span>
                     </div>
 
                     <div className="bg-slate-950 p-3 border border-slate-900 rounded-xl text-center">
-                      <span className="text-slate-550 text-3xs uppercase block">RESP RATE</span>
+                      <span className="text-slate-500 text-3xs uppercase block">RESP RATE</span>
                       <Activity className="h-4 w-4 mx-auto text-pink-400 my-1.5" />
                       <span className="text-md font-mono font-bold text-pink-400 block">{activePatient.vitals.respiratoryRate}</span>
                       <span className="text-3xs text-slate-500 font-mono font-bold leading-none block mt-0.5">/MIN</span>
                     </div>
 
                     <div className="bg-slate-950 p-3 border border-slate-900 rounded-xl text-center">
-                      <span className="text-slate-550 text-3xs uppercase block">TEMP</span>
-                      <Thermometer className="h-4 w-4 mx-auto text-orange-450 my-1.5" />
+                      <span className="text-slate-500 text-3xs uppercase block">TEMP</span>
+                      <Thermometer className="h-4 w-4 mx-auto text-orange-500 my-1.5" />
                       <span className="text-md font-mono font-bold text-orange-400 block">{activePatient.vitals.temperature}°C</span>
                       <span className="text-3xs text-slate-500 font-mono font-bold leading-none block mt-0.5">Celsius</span>
                     </div>
@@ -525,7 +559,7 @@ export default function NurseDashboard({
                       alerts.filter(a => !a.acknowledged && a.patientId === activePatient.id).map(a => (
                         <div key={a.id} className="bg-rose-950/10 border border-rose-500/25 px-4.5 py-3 rounded-xl flex justify-between items-center text-3xs font-mono">
                           <div>
-                            <span className="text-rose-450 font-black animate-pulse uppercase">// CRITICAL EXCURSION ALARM TYPE: {a.type}</span>
+                            <span className="text-rose-500 font-black animate-pulse uppercase">// CRITICAL EXCURSION ALARM TYPE: {a.type}</span>
                             <p className="text-slate-300 font-medium uppercase font-sans mt-1 text-[10px]">{a.message}</p>
                           </div>
                           <Button variant="cyan" size="xs" onClick={() => onAcknowledgeAlert(a.id)}>
@@ -686,8 +720,25 @@ export default function NurseDashboard({
                                     <div className="mt-1 text-[8px] italic text-slate-400 leading-snug font-sans">
                                       <strong>Rationale:</strong> {opt.rationale}
                                     </div>
-                                    <div className="mt-1 text-right text-[8.5px]">
-                                      Risk Red: <span className="line-through text-rose-450">{creResult.current_risk}%</span> → <span className="text-emerald-400 font-bold">{opt.predicted_risk_after}%</span>
+                                    <div className="mt-1.5 flex justify-between items-center text-[8.5px] border-t border-slate-905 pt-1.5">
+                                      <div className="text-left">
+                                        Risk: <span className="line-through text-rose-500 font-bold">{creResult.current_risk}%</span> → <span className="text-emerald-400 font-bold">{opt.predicted_risk_after}%</span>
+                                      </div>
+                                      {onDeployReversalProtocol && (
+                                        <button
+                                          onClick={() => {
+                                            onDeployReversalProtocol(
+                                              activePatient.id,
+                                              opt.label,
+                                              opt.predicted_risk_after,
+                                              opt.interventions
+                                            );
+                                          }}
+                                          className="text-[9px] bg-[#091e3a] hover:bg-cyan-500 text-cyan-400 hover:text-black font-mono px-2 py-0.5 border border-cyan-500/30 rounded duration-150 transition-all font-black uppercase tracking-wider cursor-pointer shadow-[0_0_8px_rgba(6,182,212,0.1)]"
+                                        >
+                                          Deploy Protocol ⚕
+                                        </button>
+                                      )}
                                     </div>
                                   </div>
                                 );
@@ -1078,9 +1129,18 @@ export default function NurseDashboard({
                           placeholder="Enter detailed shift progress metrics, hydration reviews, mental status index, recovery scale observations..."
                         />
 
-                        <Button variant="primary" size="md" onClick={handleSaveNotes} className="w-full py-2.5">
-                          Commit Shift Report Logs to Client Dossier
-                        </Button>
+                        <div className="grid grid-cols-2 gap-3">
+                          <Button variant="primary" size="md" onClick={handleSaveNotes} className="w-full py-2.5">
+                            Commit Report to Dossier
+                          </Button>
+                          <button 
+                            type="button"
+                            onClick={handleDiscardNotes} 
+                            className="bg-rose-950/20 border border-rose-500/30 hover:bg-[#1a0e13]/80 text-rose-450 hover:text-rose-400 text-2xs font-mono font-bold py-2.5 px-4 rounded-xl cursor-pointer uppercase transition-all shadow"
+                          >
+                            Discard Draft Note (IWS)
+                          </button>
+                        </div>
                       </div>
                     );
                   } else {

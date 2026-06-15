@@ -69,7 +69,28 @@ export default function App() {
   ]);
 
   // Shared Clinical Worry & Counterfactual Reversal system coordinates
-  const [nurseSessionEvents, setNurseSessionEvents] = useState<Record<string, any[]>>({});
+  const [nurseSessionEvents, setNurseSessionEvents] = useState<Record<string, any[]>>(() => {
+    const now = Date.now();
+    return {
+      "pat_cmd_100": [
+        { event_type: "page_view", timestamp: new Date(now - 600000).toISOString(), duration_seconds: 85, action_taken: false },
+        { event_type: "vitals_view", timestamp: new Date(now - 300000).toISOString(), duration_seconds: 92, action_taken: false },
+        { event_type: "page_view", timestamp: new Date(now - 100000).toISOString(), duration_seconds: 45, action_taken: false }
+      ],
+      "pat_cmd_101": [
+        { event_type: "page_view", timestamp: new Date(now - 60000).toISOString(), duration_seconds: 12, action_taken: false },
+        { event_type: "vitals_view", timestamp: new Date(now - 30000).toISOString(), duration_seconds: 80, action_taken: false },
+        { event_type: "note_abandoned", timestamp: new Date(now).toISOString(), duration_seconds: 110, action_taken: false }
+      ],
+      "pat_cmd_102": [
+        { event_type: "page_view", timestamp: new Date(now - 5000).toISOString(), duration_seconds: 22, action_taken: false },
+        { event_type: "vitals_view", timestamp: new Date(now - 4500).toISOString(), duration_seconds: 20, action_taken: false },
+        { event_type: "page_view", timestamp: new Date(now - 3500).toISOString(), duration_seconds: 30, action_taken: false },
+        { event_type: "vitals_view", timestamp: new Date(now - 2800).toISOString(), duration_seconds: 18, action_taken: false },
+        { event_type: "page_view", timestamp: new Date(now).toISOString(), duration_seconds: 21, action_taken: false }
+      ]
+    };
+  });
   const [iwsEvaluations, setIwsEvaluations] = useState<Record<string, any>>({});
   const [combinedDoctorAlerts, setCombinedDoctorAlerts] = useState<any[]>([]);
 
@@ -251,6 +272,56 @@ export default function App() {
       }
       return p;
     }));
+  };
+
+  const handleDeployReversalProtocol = (
+    patientId: string,
+    protocolLabel: string,
+    predictedRiskAfter: number,
+    interventions: string[]
+  ) => {
+    setPatients((current) =>
+      current.map((p) => {
+        if (p.id === patientId) {
+          // Bring vitals back down to stable healthy baseline
+          const stableVitals = {
+            heartRate: 74,
+            spo2: 99,
+            systolicBP: 122,
+            diastolicBP: 78,
+            temperature: 36.6,
+            respiratoryRate: 15,
+          };
+          return {
+            ...p,
+            vitals: stableVitals,
+            riskScore: predictedRiskAfter,
+            status: "Stable" as const,
+            timeline: [
+              {
+                id: `t_reversal_${Date.now()}`,
+                time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                event: `[SYSTEM 1 - CLINICAL REVERSAL DEPLOYED] Protocol: ${protocolLabel.toUpperCase()} executed by shift clinician. Interventions completed: ${interventions.join(" | ")}. Patient vitals stabilized to normal boundaries. Risk reduced to: ${predictedRiskAfter}%.`,
+                type: "treatment" as const,
+                category: "success" as const,
+              },
+              ...p.timeline,
+            ],
+          };
+        }
+        return p;
+      })
+    );
+
+    setShiftActivities((prev) => [
+      {
+        id: `sh_rev_${Date.now()}`,
+        time: currentTimeStr || "23:50:00",
+        type: "vitals_update" as const,
+        message: `Registered successful CRE protocol deployment: ${protocolLabel} for patient ID ${patientId}.`,
+      },
+      ...prev,
+    ]);
   };
 
   // Blood Banking Event Handlers
@@ -549,6 +620,7 @@ export default function App() {
                   onAddPatientTimelineNote={handleAddPatientTimelineNote}
                   onAcknowledgeAlert={handleAcknowledgeAlert}
                   onCreateBloodRequest={handleCreateBloodRequest}
+                  onDeployReversalProtocol={handleDeployReversalProtocol}
                 />
               ) : (
                 <AdminDashboard
