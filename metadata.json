@@ -1,6 +1,6 @@
 {
-  "name": "Chroma Deck 2077",
-  "description": "An interactive cyberpunk Netrunner console with a live breach protocol decryptor, cyberware biometric analyzer, and Gemini-powered neural link companion constructs.",
+  "name": "CareSync AI",
+  "description": "A futuristic 3D Hospital Digital Twin and Critical Patient Monitoring System supporting dual-role Doctor & Nurse clinical workflows, live biometric alerts, and AI-powered clinical insights.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

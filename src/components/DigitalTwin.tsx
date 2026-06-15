@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { Patient, AlertNotification } from "../types";
-import { Bed, Radio, Cpu, RefreshCw, ZoomIn, ZoomOut, Layers, Eye, ShieldAlert, Heart, Activity } from "lucide-react";
+import { Bed, Radio, Cpu, RefreshCw, ZoomIn, ZoomOut, Layers, Eye, Heart, ShieldAlert, Activity, User, Info, CheckCircle2 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
 interface DigitalTwinProps {
@@ -16,240 +16,234 @@ export default function DigitalTwin({
   onSelectPatient,
   alerts
 }: DigitalTwinProps) {
-  const [activeFloor, setActiveFloor] = useState<number>(1);
-  const [zoomLevel, setZoomLevel] = useState<number>(1);
-  const [perspectiveMode, setPerspectiveMode] = useState<"isometric" | "topdown">("isometric");
+  const [activeDept, setActiveDept] = useState<"ICU" | "Emergency" | "Cardiology" | "Neurology" | "General Ward" | "Surgery Ward">("ICU");
+  const [zoomLevel, setZoomLevel] = useState<number>(0.95);
+  const [perspectiveMode, setPerspectiveMode] = useState<"isometric" | "isometric-high" | "topdown">("isometric");
 
-  // Get rooms belonging to the active floor:
-  // Floor 1 -> Room starts with "1", Floor 2 -> Room starts with "2", Floor 3 -> Room starts with "3"
-  const floorPatients = useMemo(() => {
-    return patients.filter((p) => p.roomNumber.startsWith(String(activeFloor)));
-  }, [patients, activeFloor]);
+  // Get patients for the active department
+  const filteredPatients = useMemo(() => {
+    return patients.filter((p) => p.department === activeDept);
+  }, [patients, activeDept]);
 
-  // Status-to-color mapping
-  const getRoomColorClass = (status: "Stable" | "Warning" | "High Risk" | "Critical") => {
+  // Status metrics counts for active department
+  const deptStats = useMemo(() => {
+    const total = filteredPatients.length;
+    const critical = filteredPatients.filter(p => p.status === "Critical").length;
+    const highRisk = filteredPatients.filter(p => p.status === "High Risk").length;
+    const warning = filteredPatients.filter(p => p.status === "Warning").length;
+    const stable = filteredPatients.filter(p => p.status === "Stable").length;
+    return { total, critical, highRisk, warning, stable };
+  }, [filteredPatients]);
+
+  // Color Mapping helper
+  const getStatusCoreTheme = (status: "Stable" | "Warning" | "High Risk" | "Critical") => {
     switch (status) {
       case "Stable":
         return {
-          border: "border-emerald-500/40 hover:border-emerald-400 bg-emerald-500/5 hover:bg-emerald-500/10",
-          glow: "shadow-[inset_0_0_15px_rgba(16,185,129,0.1)]",
-          badge: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
+          border: "border-emerald-500/30 hover:border-emerald-400 bg-emerald-950/20 hover:bg-emerald-950/35",
+          shadow: "shadow-[inset_0_0_15px_rgba(16,185,129,0.08)]",
+          badge: "bg-emerald-500/15 text-emerald-400 border-emerald-500/20",
           text: "text-emerald-400",
-          led: "bg-emerald-500 hover:bg-emerald-400"
+          led: "bg-emerald-500",
+          bar: "bg-emerald-500"
         };
       case "Warning":
         return {
-          border: "border-yellow-500/40 hover:border-yellow-400 bg-yellow-500/5 hover:bg-yellow-500/10",
-          glow: "shadow-[inset_0_0_15px_rgba(245,158,11,0.1)]",
-          badge: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
+          border: "border-yellow-500/30 hover:border-yellow-400 bg-yellow-950/15 hover:bg-yellow-950/25",
+          shadow: "shadow-[inset_0_0_15px_rgba(245,158,11,0.08)]",
+          badge: "bg-yellow-500/15 text-yellow-400 border-yellow-500/20",
           text: "text-yellow-400",
-          led: "bg-yellow-500 hover:bg-yellow-400"
+          led: "bg-yellow-500",
+          bar: "bg-yellow-500"
         };
       case "High Risk":
         return {
-          border: "border-orange-500/40 hover:border-orange-400 bg-orange-500/5 hover:bg-orange-500/10",
-          glow: "shadow-[inset_0_0_20px_rgba(249,115,22,0.15)]",
-          badge: "bg-orange-500/20 text-orange-400 border-orange-500/30",
-          text: "text-orange-400",
-          led: "bg-orange-500 hover:bg-orange-400"
+          border: "border-orange-500/35 hover:border-orange-400 bg-orange-950/15 hover:bg-orange-950/25",
+          shadow: "shadow-[inset_0_0_20px_rgba(249,115,22,0.1)]",
+          badge: "bg-orange-500/15 text-orange-400 border-orange-500/20",
+          text: "text-orange-440",
+          led: "bg-orange-500",
+          bar: "bg-orange-500"
         };
       case "Critical":
         return {
-          border: "border-rose-500 hover:border-rose-400 bg-rose-500/15 hover:bg-rose-500/25 animate-pulse",
-          glow: "shadow-[0_0_20px_rgba(239,68,68,0.3),_inset_0_0_20px_rgba(239,68,68,0.2)]",
-          badge: "bg-rose-500/30 text-rose-400 border-rose-500/40",
+          border: "border-rose-500 bg-rose-950/40 hover:bg-rose-950/50 hover:border-rose-450",
+          shadow: "shadow-[0_0_15px_rgba(239,68,68,0.15),_inset_0_0_15px_rgba(239,68,68,0.15)]",
+          badge: "bg-rose-500/20 text-rose-400 border-rose-500/30",
           text: "text-rose-400",
-          led: "bg-rose-500 animate-ping"
+          led: "bg-rose-500 animate-pulse",
+          bar: "bg-rose-500"
         };
     }
   };
 
-  // Build grid coordinate multipliers for the isometric projection
-  const getRoomPosition = (index: number) => {
-    // Lay rooms in a nice 3x6 grid for a surgical cluster look
-    const row = Math.floor(index / 6);
-    const col = index % 6;
-    return { row, col };
+  // 3D Matrix transform mappings based on perspective mode
+  const getTransformStyles = () => {
+    switch (perspectiveMode) {
+      case "isometric":
+        return `scale(${zoomLevel}) rotateX(55deg) rotateZ(-35deg) translateY(-20px)`;
+      case "isometric-high":
+        return `scale(${zoomLevel}) rotateX(65deg) rotateZ(-55deg) translateY(-40px)`;
+      case "topdown":
+        return `scale(${zoomLevel})`;
+    }
   };
 
   return (
     <div id="digital-twin-container" className="grid grid-cols-1 lg:grid-cols-4 gap-6 select-none">
       
-      {/* Sidebar Controls Panel */}
+      {/*********** LEFT BAR: DEPARTMENT MANAGER & STATS ***********/}
       <div className="lg:col-span-1 space-y-4">
         
-        {/* Department / Floor Controller */}
-        <div className="bg-[#0b1222]/90 border border-slate-800 rounded-xl p-4">
+        {/* Department / Ward Core Selection */}
+        <div className="bg-[#040811] border border-slate-900 rounded-2xl p-4 shadow-xl">
           <div className="flex items-center gap-2 mb-4">
             <Layers className="h-4 w-4 text-cyan-400" />
-            <h3 className="text-xs font-display tracking-widest text-cyan-400 uppercase font-black">
-              Holo floor elevation
+            <h3 className="text-2xs font-display tracking-widest text-cyan-400 uppercase font-black">
+              Ward sub-sectors
             </h3>
           </div>
           
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             {[
-              { floor: 3, label: "Floor 3: Emergency & ICU", dept: "ICU / Emergency" },
-              { floor: 2, label: "Floor 2: Cardiology & Neuro", dept: "Cardiology / Neurology" },
-              { floor: 1, label: "Floor 1: General & Diagnostics", dept: "General Ward" }
-            ].map((f) => (
+              { id: "ICU", count: 20, label: "ICU Command", desc: "Critical Level Telemetry" },
+              { id: "Emergency", count: 30, label: "Emergency Main", desc: "Trauma & Rapid Triage" },
+              { id: "Cardiology", count: 18, label: "Cardiology Wing", desc: "Arrhythmia Monitors" },
+              { id: "Neurology", count: 17, label: "Neurology Core", desc: "Synaptic ICP Monitors" },
+              { id: "General Ward", count: 18, label: "General Ward Beds", desc: "Recoveries & IV Drifts" },
+              { id: "Surgery Ward", count: 17, label: "Surgery Ward Units", desc: "Post-op Monitoring" }
+            ].map((d) => (
               <button
-                key={f.floor}
-                id={`floor-tab-${f.floor}`}
+                key={d.id}
+                id={`dept-tab-${d.id}`}
                 type="button"
-                onClick={() => setActiveFloor(f.floor)}
-                className={`w-full px-3 py-3 rounded-lg border text-left transition-all relative overflow-hidden flex items-center justify-between cursor-pointer ${
-                  activeFloor === f.floor
-                    ? "bg-[#0f1d3a] border-cyan-500 shadow-[0_0_15px_rgba(0,240,255,0.1)] text-white"
-                    : "bg-[#060a12]/50 border-slate-900/60 hover:border-slate-800 text-slate-400 hover:text-slate-200"
+                onClick={() => setActiveDept(d.id as any)}
+                className={`w-full px-3 py-2.5 rounded-xl border text-left transition-all relative overflow-hidden flex items-center justify-between cursor-pointer ${
+                  activeDept === d.id
+                    ? "bg-[#0b1b33] border-cyan-500 text-white shadow-md shadow-cyan-500/5"
+                    : "bg-[#050912]/50 border-slate-900/60 hover:border-slate-800 text-slate-400 hover:text-slate-200"
                 }`}
               >
                 <div>
-                  <div className="text-[10px] font-mono tracking-widest leading-none uppercase text-slate-500 mb-1">
-                    Elevation Level
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-2xs font-bold font-display uppercase tracking-wider">{d.label}</span>
+                    <span className="text-[8px] font-mono px-1.5 py-0.2 bg-slate-900 border border-slate-800 rounded-md text-slate-300">
+                      {d.count} Beds
+                    </span>
                   </div>
-                  <div className="text-xs font-bold font-display">{f.label}</div>
+                  <div className="text-[9px] font-mono text-slate-500 mt-1 uppercase">{d.desc}</div>
                 </div>
-                {activeFloor === f.floor && (
-                  <div className="absolute right-0 top-0 bottom-0 w-1 bg-cyan-400 shadow-[0_0_8px_rgba(0,240,255,0.8)]" />
+                {activeDept === d.id && (
+                  <div className="absolute right-0 top-0 bottom-0 w-1 bg-cyan-400" />
                 )}
               </button>
             ))}
           </div>
         </div>
 
-        {/* Tactical Parameters widget */}
-        <div className="bg-[#0b1222]/90 border border-slate-800 rounded-xl p-4 space-y-4">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-mono tracking-widest text-slate-500 uppercase">Interactive view</span>
-            <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 uppercase font-bold">
-              SYSTEM LIVE
-            </span>
+        {/* Level Controls & Spatial Cameras */}
+        <div className="bg-[#040811] border border-slate-900 rounded-2xl p-4 space-y-3.5 shadow-xl">
+          <div className="text-[10px] font-mono tracking-widest text-slate-500 uppercase">Interactive Camera Angle</div>
+
+          <div className="grid grid-cols-3 gap-1.5 text-[9px] font-mono">
+            {[
+              { id: "isometric", label: "ISO 3D" },
+              { id: "isometric-high", label: "HIGH 3D" },
+              { id: "topdown", label: "FLAT 2D" }
+            ].map((cfg) => (
+              <button
+                key={cfg.id}
+                onClick={() => setPerspectiveMode(cfg.id as any)}
+                className={`py-2 border rounded-lg uppercase tracking-wider text-center cursor-pointer transition-all ${
+                  perspectiveMode === cfg.id
+                    ? "bg-[#0c1c35] border-cyan-500 text-cyan-400 font-bold"
+                    : "bg-slate-950/40 border-slate-900 text-slate-450 hover:text-white"
+                }`}
+              >
+                {cfg.label}
+              </button>
+            ))}
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
+          <div className="pt-2 border-t border-slate-900/60 flex justify-between gap-2 text-[9px] font-mono">
             <button
-              id="switch-view-proj-btn"
-              type="button"
-              onClick={() => setPerspectiveMode(perspectiveMode === "isometric" ? "topdown" : "isometric")}
-              className="py-2.5 rounded-lg border border-slate-800 bg-[#060a12]/40 hover:border-slate-700 text-xs font-mono font-bold tracking-wider text-cyan-400 flex items-center justify-center gap-1.5 cursor-pointer"
+              onClick={() => setZoomLevel(Math.min(1.3, zoomLevel + 0.05))}
+              className="flex-1 py-1 bg-slate-950 border border-slate-900 hover:border-slate-700 text-slate-300 rounded flex items-center justify-center gap-1 cursor-pointer"
             >
-              <Cpu className="h-3.5 w-3.5" />
-              <span>{perspectiveMode === "isometric" ? "3D ISOMETRIC" : "2D FLAT GRID"}</span>
-            </button>
-
-            <button
-              id="reset-digital-twin-zoom-btn"
-              type="button"
-              onClick={() => setZoomLevel(1)}
-              className="py-2.5 rounded-lg border border-slate-800 bg-[#060a12]/40 hover:border-slate-700 text-xs font-mono font-bold tracking-wider text-slate-350 flex items-center justify-center gap-1.5 cursor-pointer"
-            >
-              <RefreshCw className="h-3.5 w-3.5" />
-              <span>RESET CAMERA</span>
-            </button>
-          </div>
-
-          <div className="col-span-2 pt-2 border-t border-slate-900 flex justify-between gap-2">
-            <button
-              id="zoom-in-twin-btn"
-              type="button"
-              onClick={() => setZoomLevel(Math.min(1.4, zoomLevel + 0.1))}
-              className="flex-1 py-1.5 bg-[#060a12]/80 border border-slate-850 hover:border-slate-750 text-slate-300 rounded text-center flex items-center justify-center gap-1.5 text-xs font-mono cursor-pointer"
-            >
-              <ZoomIn className="h-3 w-3" /> Zoom In
+              <ZoomIn className="h-2.5 w-2.5" /> ZOOM IN
             </button>
             <button
-              id="zoom-out-twin-btn"
-              type="button"
-              onClick={() => setZoomLevel(Math.max(0.7, zoomLevel - 0.1))}
-              className="flex-1 py-1.5 bg-[#060a12]/80 border border-slate-850 hover:border-slate-750 text-slate-300 rounded text-center flex items-center justify-center gap-1.5 text-xs font-mono cursor-pointer"
+              onClick={() => setZoomLevel(Math.max(0.7, zoomLevel - 0.05))}
+              className="flex-1 py-1 bg-slate-950 border border-slate-900 hover:border-slate-700 text-slate-300 rounded flex items-center justify-center gap-1 cursor-pointer"
             >
-              <ZoomOut className="h-3 w-3" /> Zoom Out
+              <ZoomOut className="h-2.5 w-2.5" /> ZOOM OUT
             </button>
           </div>
         </div>
 
-        {/* Live Ward Diagnostics */}
-        <div className="bg-[#0b1222]/90 border border-slate-800 rounded-xl p-4">
-          <div className="text-2xs font-mono tracking-widest text-slate-500 uppercase mb-3">
-            Active Alerts on this level
-          </div>
-          <div className="space-y-1.5 max-h-[140px] overflow-y-auto pr-1">
-            {alerts.filter(a => !a.acknowledged && a.roomNumber.startsWith(String(activeFloor))).length === 0 ? (
-              <div className="text-3xs font-mono text-emerald-400 bg-emerald-500/5 border border-emerald-500/10 p-2 rounded text-center uppercase tracking-wider font-bold">
-                NO ESCALATION DETECTED
-              </div>
-            ) : (
-              alerts.filter(a => !a.acknowledged && a.roomNumber.startsWith(String(activeFloor))).map((a) => (
-                <div key={a.id} className="text-3xs font-mono bg-rose-500/10 border border-rose-500/20 p-2 rounded flex items-center justify-between">
-                  <span className="text-rose-400 font-bold uppercase shrink-0">ROOM {a.roomNumber}</span>
-                  <span className="text-slate-300 truncate ml-2 mr-1">{a.type}</span>
-                  <span className="animate-pulse h-1 w-1 bg-rose-500 rounded-full shrink-0" />
-                </div>
-              ))
-            )}
+        {/* Sector Health Stat Indices */}
+        <div className="bg-[#040811] border border-slate-900 rounded-2xl p-4 shadow-xl text-3xs font-mono tracking-wider space-y-2">
+          <div className="text-slate-500 uppercase tracking-widest text-[9px]">Sector Diagnostics: {activeDept}</div>
+          
+          <div className="grid grid-cols-2 gap-2 text-center pt-1.5">
+            <div className="bg-emerald-950/10 border border-emerald-900/35 p-1 px-1.5 rounded-lg">
+              <span className="text-emerald-400 uppercase block">Stable</span>
+              <span className="text-xs font-bold text-emerald-400">{deptStats.stable}</span>
+            </div>
+            <div className="bg-yellow-950/10 border border-yellow-900/35 p-1 px-1.5 rounded-lg">
+              <span className="text-yellow-400 uppercase block">Warning</span>
+              <span className="text-xs font-bold text-yellow-400">{deptStats.warning}</span>
+            </div>
+            <div className="bg-orange-950/10 border border-orange-900/35 p-1 px-1.5 rounded-lg">
+              <span className="text-orange-400 uppercase block">High-Risk</span>
+              <span className="text-xs font-bold text-orange-400">{deptStats.highRisk}</span>
+            </div>
+            <div className="bg-rose-950/10 border border-rose-900/35 p-1 px-1.5 rounded-lg">
+              <span className="text-rose-400 uppercase block">Critical</span>
+              <span className="text-xs font-bold text-rose-400 shrink-0">{deptStats.critical}</span>
+            </div>
           </div>
         </div>
 
       </div>
 
-      {/* Main 3D Interactive Cyber Canvas */}
-      <div className="lg:col-span-3 bg-[#080d19]/90 border border-slate-850 rounded-2xl relative overflow-hidden min-h-[520px] flex flex-col justify-between">
+      {/*********** RIGHT MAP DECK: PSEUDO-3D STAGE ***********/}
+      <div className="lg:col-span-3 bg-[#05080e] border border-slate-900 rounded-2xl relative overflow-hidden min-h-[580px] flex flex-col justify-between shadow-2xl">
         
-        {/* Hologram Header HUD */}
-        <div className="absolute top-4 left-4 p-3 bg-slate-950/75 border border-cyan-500/10 rounded-xl backdrop-blur-md z-10 font-mono text-[10px] tracking-widest text-cyan-400 flex flex-col gap-1 shadow-lg">
+        {/* Hologram Scanner HUD overlay */}
+        <div className="absolute top-4 left-4 p-3 bg-slate-950/80 border border-cyan-500/10 rounded-xl backdrop-blur-md z-10 font-mono text-[10px] tracking-widest text-cyan-400 flex flex-col gap-1 shadow-md">
           <div className="flex items-center gap-1.5 font-bold">
             <Radio className="h-3 w-3 animate-pulse text-cyan-400" />
-            <span>CARESYNC HOLOGRAPHIC DUAL CO-PILOT ACTIVE</span>
+            <span>CARESYNC AI DUAL CO-PILOT: ACTIVE</span>
           </div>
-          <div className="text-slate-400 text-3xs">
-            GEOM_MATRIX: ELEVATION_{activeFloor}00 // PERSPECTIVE: {perspectiveMode.toUpperCase()}
-          </div>
-        </div>
-
-        {/* Legend block */}
-        <div className="absolute bottom-4 left-4 p-2 bg-slate-950/75 border border-slate-850 rounded-lg backdrop-blur-md z-10 flex gap-4 text-3xs font-mono">
-          <div className="flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-emerald-500" />
-            <span className="text-emerald-400">STABLE</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-yellow-500" />
-            <span className="text-yellow-400">WARNING</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-orange-500" />
-            <span className="text-orange-400">HIGH RISK</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-rose-500 animate-ping" />
-            <span className="text-rose-400">CRITICAL</span>
+          <div className="text-slate-500 text-3xs uppercase">
+            ACTIVE DEP: {activeDept} SECTOR // DEPT_LOAD: {deptStats.critical > 0 ? "SURCHARGED" : "NOMINAL"}
           </div>
         </div>
 
-        {/* Holographic 3D Map Area */}
-        <div id="holographic-3d-stage" className="flex-1 flex items-center justify-center relative overflow-hidden bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-blue-950/20 via-[#070b15] to-[#050810]/95">
+        {/* 3D Level Map Grid Canvas */}
+        <div id="holographic-3d-stage" className="flex-1 flex items-center justify-center relative overflow-hidden bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-blue-950/15 via-[#04070d] to-[#030509]">
           
-          {/* Tactical Medical Schema background grids */}
-          <div className="absolute inset-0 cyber-grid opacity-15 pointer-events-none" />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[300px] border border-cyan-500/5 rounded-full blur-2xl transform rotate-12 pointer-events-none" />
+          {/* Cybergrid background lines */}
+          <div className="absolute inset-x-0 inset-y-0 cyber-grid opacity-10 pointer-events-none" />
 
-          {/* 3D Render Transform Stage */}
+          {/* Interactive Pseudo 3D Isometric container */}
           <div
             style={{
-              transform: perspectiveMode === "isometric" 
-                ? `scale(${zoomLevel}) rotateX(60deg) rotateZ(-45deg)` 
-                : `scale(${zoomLevel})`,
-              transition: "transform 0.8s cubic-bezier(0.16, 1, 0.3, 1)"
+              transform: getTransformStyles(),
+              transformStyle: "preserve-3d",
+              transition: "transform 1.2s cubic-bezier(0.16, 1, 0.3, 1)"
             }}
-            className="relative w-[500px] h-[350px] flex items-center justify-center transition-transform"
+            className="relative w-[640px] h-[380px] flex items-center justify-center transition-transform duration-1000"
           >
-            {/* Grid Bed Layout Nodes */}
-            <div className="absolute inset-x-0 inset-y-0 grid grid-cols-6 grid-rows-3 gap-6 p-4">
-              {floorPatients.slice(0, 18).map((p, index) => {
-                const roomStyles = getRoomColorClass(p.status);
+            {/* Real floor physical foundation bounds */}
+            <div className="absolute inset-0 bg-[#070b16]/40 border-2 border-slate-800/40 rounded-3xl p-4 shadow-3xl pointer-events-none" style={{ transform: "translateZ(-15px)" }} />
+            
+            {/* The beds workspace layout */}
+            <div className="grid grid-cols-5 gap-4.5 p-4 w-full h-full">
+              {filteredPatients.map((p, index) => {
                 const isSelected = selectedPatient?.id === p.id;
-                const { row, col } = getRoomPosition(index);
+                const theme = getStatusCoreTheme(p.status);
 
                 return (
                   <motion.button
@@ -258,142 +252,170 @@ export default function DigitalTwin({
                     onClick={() => onSelectPatient(p)}
                     initial={{ opacity: 0, scale: 0.8 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: index * 0.02 }}
-                    className={`relative rounded-xl border p-2.5 flex flex-col justify-between transition-all cursor-pointer select-none group text-left outline-none ${roomStyles.border} ${roomStyles.glow} ${
-                      isSelected 
-                        ? "ring-2 ring-cyan-400 scale-[1.05] bg-cyan-950/20 shadow-[0_0_25px_rgba(34,211,238,0.2)]" 
-                        : "bg-slate-900/60"
+                    transition={{ delay: index * 0.015 }}
+                    className={`relative rounded-xl border p-2.5 flex flex-col justify-between select-none group text-left outline-none transition-all duration-300 ${theme.border} ${theme.shadow} ${
+                      isSelected
+                        ? "ring-2 ring-cyan-400 bg-cyan-950/25 shadow-[0_0_20px_rgba(6,182,212,0.15)] scale-[1.04]"
+                        : "bg-slate-950/70"
                     }`}
                     style={{
                       transformStyle: "preserve-3d",
-                      // High dynamic Z-axis pop out for critical beds to give Iron-man hologram effect
-                      transform: isSelected 
-                        ? "translateZ(30px)" 
-                        : p.status === "Critical" 
-                        ? "translateZ(10px)" 
+                      // Lift card on hover or standard isometric translation Z for high dramatic sci-fi height!
+                      transform: isSelected
+                        ? "translateZ(35px)"
+                        : p.status === "Critical"
+                        ? "translateZ(14px)"
                         : "translateZ(0px)",
-                      transition: "all 0.3s cubic-bezier(0.16, 1, 0.3, 1)"
+                      boxShadow: isSelected ? "0 25px 50px -12px rgba(0, 0, 0, 0.8)" : "0 4px 6px -1px rgba(0,0,0,0.5)"
                     }}
                   >
-                    {/* Isometric Hologram Vertical Anchor Line */}
-                    {perspectiveMode === "isometric" && (
-                      <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[1px] h-6 bg-cyan-500/20 pointer-events-none" style={{ transform: "rotateX(-60deg)", transformOrigin: "bottom" }} />
+                    {/* Floating Vertical Telemetry Laser Anchor */}
+                    {perspectiveMode !== "topdown" && (
+                      <div className="absolute bottom-[-15px] left-1/2 -translate-x-1/2 w-[1px] h-[15px] border-l border-dashed border-cyan-500/10 pointer-events-none" style={{ transform: "rotateX(-55deg)", transformOrigin: "bottom" }} />
                     )}
 
-                    {/* Sensor Node Header Vitals */}
-                    <div className="flex items-center justify-between font-mono text-[9px] mb-1">
-                      <span className="text-slate-500">R: {p.roomNumber}</span>
-                      <span className={`inline-block w-1.5 h-1.5 rounded-full ${roomStyles.led}`} />
+                    {/* Bed Title room */}
+                    <div className="flex items-center justify-between font-mono text-[8.5px] mb-1">
+                      <span className="text-slate-500">{p.roomNumber}</span>
+                      <span className="text-[7.5px] text-slate-400 uppercase font-bold">{p.department}</span>
                     </div>
 
-                    {/* Ward Room Graphical Asset Panel */}
-                    <div className="flex-1 flex flex-col justify-center items-center py-1">
-                      {p.status === "Critical" ? (
-                        <motion.div
-                          className="flex flex-col items-center gap-1 text-rose-400"
-                          animate={{ scale: [1, 1.2, 1] }}
-                          transition={{ repeat: Infinity, duration: 1.2 }}
-                        >
-                          <Bed className="h-6 w-6 filter drop-shadow-[0_0_8px_rgb(239,68,68)]" />
-                          <div className="text-[10px] font-mono font-bold">{p.vitals.heartRate} bpm</div>
-                        </motion.div>
-                      ) : (
-                        <div className={`flex flex-col items-center gap-1 ${p.status === 'High Risk' ? 'text-orange-450' : p.status === 'Warning' ? 'text-yellow-400' : 'text-slate-400'}`}>
-                          <Bed className="h-5 w-5" />
-                          <div className="text-[10px] font-mono leading-none">{p.vitals.heartRate}</div>
-                        </div>
-                      )}
+                    {/* Patient Name indicators */}
+                    <div className="text-[10px] font-mono text-slate-200 font-extrabold truncate w-full mb-1 border-b border-slate-900 pb-1">
+                      {p.name.split(" ")[0]} {p.name.split(" ")[1]?.charAt(0)}.
                     </div>
 
-                    {/* Patient Name text indicator */}
-                    <div className="mt-2 text-[9px] font-mono tracking-wider truncate w-full text-slate-300 font-bold border-t border-slate-800/60 pt-1">
-                      {p.name.split(" ")[0]}
+                    {/* Bed Icon and live vitals ticker */}
+                    <div className="flex-1 flex items-center justify-between py-1 px-1">
+                      <div className="relative">
+                        {p.status === "Critical" ? (
+                          <motion.div
+                            animate={{ scale: [1, 1.25, 1], rotate: [0, -3, 3, 0] }}
+                            transition={{ repeat: Infinity, duration: 1.1 }}
+                            className="text-rose-450"
+                          >
+                            <Bed className="h-6.5 w-6.5 filter drop-shadow-[0_0_8px_rgba(239,68,68,0.5)]" />
+                          </motion.div>
+                        ) : (
+                          <Bed className={`h-5 w-5 ${
+                            p.status === "High Risk" ? "text-orange-400" : p.status === "Warning" ? "text-yellow-400" : "text-slate-400"
+                          }`} />
+                        )}
+                        <span className={`absolute bottom-[-1.5px] right-[-1.5px] w-2 h-2 rounded-full border border-slate-950 ${theme.led}`} />
+                      </div>
+
+                      <div className="text-right pl-2">
+                        <span className="text-[11px] font-mono tracking-tighter text-slate-100 font-extrabold flex items-center justify-end gap-0.5 leading-none">
+                          <Heart className="h-2 w-2 text-[#ff007f] animate-pulse shrink-0" />
+                          {p.vitals.heartRate}
+                        </span>
+                        <span className="text-[9px] font-mono tracking-tighter text-cyan-400 leading-none block mt-1 font-bold">
+                          {p.vitals.spo2}% SpO₂
+                        </span>
+                      </div>
                     </div>
 
-                    {/* Highlighted Critical Pulse Overlay */}
+                    {/* Risk progress indicators bar */}
+                    <div className="mt-2 w-full bg-slate-900 rounded-sm h-[2.5px] overflow-hidden">
+                      <div
+                        className={`h-full ${theme.bar}`}
+                        style={{ width: `${p.riskScore}%` }}
+                      />
+                    </div>
+
+                    {/* Glowing outer boundary rings for critical status to trigger urgent visual alert */}
                     {p.status === "Critical" && (
-                      <div className="absolute inset-0 rounded-xl border border-rose-500/80 animate-[ping_1.5s_infinite] pointer-events-none" />
+                      <div className="absolute inset-0 rounded-xl border border-rose-500/60 animate-[ping_1400ms_infinite] pointer-events-none" />
                     )}
                   </motion.button>
                 );
               })}
             </div>
+
           </div>
+
         </div>
 
-        {/* Selected Room Overlay Panel HUD */}
+        {/*********** BOTTOM DETAILED BED OVERLAY DISPLAY ***********/}
         <AnimatePresence>
           {selectedPatient && (
             <motion.div
               initial={{ y: 50, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: 50, opacity: 0 }}
-              className="m-4 p-4 bg-slate-950/90 border border-cyan-500/20 rounded-xl backdrop-blur-md z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-2xl relative"
+              className="m-4 p-4 bg-slate-950/95 border border-cyan-500/20 rounded-2xl backdrop-blur-md z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-2xl relative"
             >
-              {/* Top active sensor scanner line */}
-              <div className="absolute top-0 right-12 left-12 h-[1px] bg-cyan-400/50 shadow-[0_0_8px_#00f0ff]" />
+              {/* Dynamic top scan border glow */}
+              <div className="absolute top-0 right-12 left-12 h-[1px] bg-gradient-to-r from-transparent via-cyan-400/80 to-transparent shadow-[0_0_8px_#00f0ff]" />
 
               <div className="flex items-center gap-3">
-                <div className={`p-2 rounded-lg border flex items-center justify-center ${
-                  getRoomColorClass(selectedPatient.status).badge
+                <div className={`p-2.5 rounded-xl border flex items-center justify-center ${
+                  getStatusCoreTheme(selectedPatient.status).badge
                 }`}>
-                  <Activity className="h-6 w-6 animate-pulse" />
+                  <Activity className="h-5 w-5 animate-pulse" />
                 </div>
                 <div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5">
                     <span className="text-xs font-mono text-cyan-400 font-black">ROOM {selectedPatient.roomNumber}</span>
-                    <span className="text-3xs font-mono text-slate-400">// {selectedPatient.id}</span>
+                    <span className="text-slate-500 font-mono text-[9px] uppercase">// {selectedPatient.department} sector</span>
+                    <span className="text-slate-400 font-mono text-[9px] uppercase">Blood Group: <span className="text-cyan-400 font-extrabold">{selectedPatient.bloodGroup}</span></span>
                   </div>
                   <h4 className="text-sm font-bold font-display uppercase tracking-wide text-white">{selectedPatient.name}</h4>
-                  <p className="text-3xs font-mono text-slate-400">Diagnosis: {selectedPatient.diagnosis}</p>
+                  <p className="text-3xs font-mono text-slate-450 uppercase leading-none mt-1">Diagnosis: {selectedPatient.diagnosis}</p>
                 </div>
               </div>
 
-              {/* Patient Live Vitals HUD */}
-              <div className="flex flex-wrap gap-4 md:gap-6 bg-slate-900/60 border border-slate-850 p-2.5 rounded-lg">
+              {/*********** CURRENT LIVE PHYSIOLOGICAL TELEMETRY ***********/}
+              <div className="flex flex-wrap gap-4 md:gap-5.5 bg-slate-900/40 border border-slate-900 p-2 rounded-xl text-3xs font-mono">
                 <div className="text-center">
-                  <div className="text-3xs font-mono text-slate-400">HEART RATE</div>
-                  <div className="text-xs font-mono text-emerald-400 font-bold flex items-center justify-center gap-0.5">
-                    <Heart className="h-3 w-3 animate-pulse text-[#ff007f]" />
+                  <div className="text-slate-500 font-black">HEART RATE</div>
+                  <div className="text-xs text-emerald-400 font-bold flex items-center justify-center gap-0.5 mt-0.5">
+                    <Heart className="h-3 w-3 text-rose-500 animate-pulse" />
                     <span>{selectedPatient.vitals.heartRate} <span className="text-3xs font-normal">BPM</span></span>
                   </div>
                 </div>
                 <div className="text-center">
-                  <div className="text-3xs font-mono text-slate-400">O₂ SAT (SpO₂2)</div>
-                  <div className="text-xs font-mono text-cyan-400 font-bold">
+                  <div className="text-slate-500 font-black">SpO₂ CONTENT</div>
+                  <div className="text-xs text-cyan-400 font-bold mt-0.5">
                     {selectedPatient.vitals.spo2}%
                   </div>
                 </div>
                 <div className="text-center">
-                  <div className="text-3xs font-mono text-slate-400">BLOOD PRESSURE</div>
-                  <div className="text-xs font-mono text-purple-400 font-bold">
-                    {selectedPatient.vitals.systolicBP}/{selectedPatient.vitals.diastolicBP} <span className="text-3xs">mmHg</span>
+                  <div className="text-slate-500 font-black">BLOOD PRESS</div>
+                  <div className="text-xs text-purple-400 font-bold mt-0.5">
+                    {selectedPatient.vitals.systolicBP}/{selectedPatient.vitals.diastolicBP}
                   </div>
                 </div>
                 <div className="text-center">
-                  <div className="text-3xs font-mono text-slate-400">TEMP</div>
-                  <div className="text-xs font-mono text-orange-400 font-bold">
+                  <div className="text-slate-500 font-black">RESP RATE</div>
+                  <div className="text-xs text-pink-400 font-bold mt-0.5">
+                    {selectedPatient.vitals.respiratoryRate} /min
+                  </div>
+                </div>
+                <div className="text-center">
+                  <div className="text-slate-500 font-black">CORE TEMP</div>
+                  <div className="text-xs text-orange-400 font-bold mt-0.5">
                     {selectedPatient.vitals.temperature}°C
                   </div>
                 </div>
-                <div className="text-center border-l border-slate-800 pl-3">
-                  <div className="text-3xs font-mono text-slate-450 uppercase">Risk SCORE</div>
-                  <div className={`text-sm font-mono font-black ${
-                    selectedPatient.riskScore > 80 ? 'text-rose-500' : selectedPatient.riskScore > 60 ? 'text-orange-500' : selectedPatient.riskScore > 30 ? 'text-yellow-400' : 'text-emerald-400'
+                <div className="text-center border-l border-slate-900 pl-3">
+                  <div className="text-slate-500 font-black">RISK SCORE</div>
+                  <div className={`text-xs font-black mt-0.5 ${
+                    selectedPatient.riskScore > 80 ? 'text-rose-500 animate-pulse' : selectedPatient.riskScore > 60 ? 'text-orange-500' : selectedPatient.riskScore > 30 ? 'text-yellow-400' : 'text-emerald-400'
                   }`}>
                     {selectedPatient.riskScore}/100
                   </div>
                 </div>
               </div>
 
-              {/* Select Case Button File */}
+              {/* Action Button */}
               <button
                 id="open-vitals-twin-detail-btn"
                 onClick={() => onSelectPatient(selectedPatient)}
-                className="w-full md:w-auto px-4 py-2 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-black text-xs font-display font-medium tracking-widest uppercase transition-all shadow-[0_0_15px_rgba(0,240,255,0.2)] flex items-center justify-center gap-1.5 cursor-pointer"
+                className="w-full md:w-auto px-4 py-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black text-2xs font-display font-medium tracking-widest uppercase transition-all shadow-[0_0_15px_rgba(0,240,255,0.25)] flex items-center justify-center gap-1.5 cursor-pointer"
               >
-                <Eye className="h-3.5 w-3.5 animate-pulse" />
-                <span>OPEN MONITOR FILE</span>
+                <Eye className="h-3.5 w-3.5" />
+                <span>OPEN SYSTEM DOSSIER</span>
               </button>
             </motion.div>
           )}

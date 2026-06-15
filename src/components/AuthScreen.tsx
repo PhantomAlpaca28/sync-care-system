@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { ShieldCheck, UserCheck, Key, Eye, EyeOff, Activity, AlertCircle } from "lucide-react";
+import { ShieldCheck, UserCheck, Key, Eye, EyeOff, Activity, AlertCircle, Sparkles, Building, Lock } from "lucide-react";
 import { UserRole, UserSession } from "../types";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -7,10 +7,25 @@ interface AuthProps {
   onLoginSuccess: (session: UserSession) => void;
 }
 
+const DOCTOR_ACCOUNTS = [
+  { name: "Dr. Arjun Kumar", staffId: "DOC001", department: "ICU & Cardiology", passcode: "1234" },
+  { name: "Dr. Priya Sharma", staffId: "DOC002", department: "Surgical/Emergency", passcode: "1234" }
+];
+
+const NURSE_ACCOUNTS = [
+  { name: "Nurse Meera Joseph", staffId: "NUR001", department: "ICU & Cardiology", passcode: "5678" },
+  { name: "Nurse Rahul Das", staffId: "NUR002", department: "Emergency & General", passcode: "5678" }
+];
+
 export default function AuthScreen({ onLoginSuccess }: AuthProps) {
   const [selectedRole, setSelectedRole] = useState<UserRole>("doctor");
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
+  const [typedStaffId, setTypedStaffId] = useState("DOC001");
+  const [selectedName, setSelectedName] = useState("Dr. Arjun Kumar");
+  
+  // Passcode authentication state
+  const [passcode, setPasscode] = useState("1234");
+  const [showPasscode, setShowPasscode] = useState(false);
+  
   const [isScanning, setIsScanning] = useState(false);
   const [scanStatus, setScanStatus] = useState("");
   const [errorMsg, setErrorMsg] = useState("");
@@ -18,34 +33,55 @@ export default function AuthScreen({ onLoginSuccess }: AuthProps) {
   const handleRoleSelect = (role: UserRole) => {
     setSelectedRole(role);
     setErrorMsg("");
-    switch (role) {
-      case "doctor":
-        setPassword("doc_synapse_2026");
-        break;
-      case "nurse":
-        setPassword("nurse_vitals_critical");
-        break;
-      case "admin":
-        setPassword("admin_hypervisor_root");
-        break;
+    if (role === "doctor") {
+      setTypedStaffId("DOC001");
+      setSelectedName("Dr. Arjun Kumar");
+      setPasscode("1234");
+    } else {
+      setTypedStaffId("NUR001");
+      setSelectedName("Nurse Meera Joseph");
+      setPasscode("5678");
+    }
+  };
+
+  const handleStaffSelect = (staffId: string) => {
+    setTypedStaffId(staffId);
+    setErrorMsg("");
+    const pool = selectedRole === "doctor" ? DOCTOR_ACCOUNTS : NURSE_ACCOUNTS;
+    const match = pool.find(item => item.staffId === staffId);
+    if (match) {
+      setSelectedName(match.name);
+      setPasscode(match.passcode);
     }
   };
 
   const handleClearanceSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!password) {
-      setErrorMsg("Security signature token required.");
+    setErrorMsg("");
+
+    const normalizedId = typedStaffId.trim().toUpperCase();
+    const pool = selectedRole === "doctor" ? DOCTOR_ACCOUNTS : NURSE_ACCOUNTS;
+    const matchedAccount = pool.find(
+      (acc) => acc.staffId === normalizedId && acc.name.toLowerCase() === selectedName.toLowerCase()
+    );
+
+    if (!matchedAccount) {
+      setErrorMsg("ID verification failure. Invalid Duty Staff record.");
+      return;
+    }
+
+    if (passcode !== matchedAccount.passcode) {
+      setErrorMsg(`Clearance Denied. Invalid clinical passcode for ${matchedAccount.name}. Hint: Type "${matchedAccount.passcode}"`);
       return;
     }
 
     setIsScanning(true);
-    setErrorMsg("");
     
     const steps = [
-      "Accessing CareSync Core IP...",
-      "Validating Cryptographic Key...",
-      "Analyzing Biometric Synaptic Pattern...",
-      "Security Clearance Grade: APPROVED"
+      "Securing clinical command link...",
+      "Validating biometric passcode hash...",
+      "Assigning sector digital twin nodes...",
+      "Clearance verified: ACCESS DEPLOYED"
     ];
 
     let currentStep = 0;
@@ -57,46 +93,45 @@ export default function AuthScreen({ onLoginSuccess }: AuthProps) {
         clearInterval(interval);
         setTimeout(() => {
           setIsScanning(false);
-          const username = selectedRole === "doctor" ? "Dr. Evelyn Sterling" : selectedRole === "nurse" ? "Nurse Marcus Finch" : "SysAdmin Julian Stark";
           onLoginSuccess({
-            username,
+            username: matchedAccount.name,
             role: selectedRole,
-            token: "CS_AUTH_" + Math.random().toString(36).substr(2, 9).toUpperCase()
+            staffId: matchedAccount.staffId,
+            token: `CS_SEC_${matchedAccount.staffId}_${Math.random().toString(36).substring(2, 6).toUpperCase()}`
           });
-        }, 600);
+        }, 500);
       }
     }, 450);
   };
 
   return (
-    <div id="auth-screen-container" className="min-h-screen bg-[#07090e] text-slate-100 flex flex-col justify-center items-center relative overflow-hidden px-4 select-none">
-      {/* Background Holographic Grid Overlay */}
-      <div className="absolute inset-0 cyber-grid opacity-20 pointer-events-none" />
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-tr from-[#00f0ff]/10 to-[#ff007f]/5 rounded-full blur-[140px] pointer-events-none" />
+    <div id="auth-screen-container" className="min-h-screen bg-[#03060b] text-slate-100 flex flex-col justify-center items-center relative overflow-hidden px-4 select-none">
+      {/* Visual background enhancements */}
+      <div className="absolute inset-0 bg-[radial-gradient(#00f0ff_0.5px,transparent_0.5px)] [background-size:20px_20px] opacity-[0.03] pointer-events-none" />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-cyan-950/20 rounded-full blur-[160px] pointer-events-none" />
 
-      {/* Futuristic Orbit Ring Accents */}
-      <div className="absolute w-[400px] h-[400px] border border-cyan-500/10 rounded-full animate-spin [animation-duration:40s] pointer-events-none" />
-      <div className="absolute w-[550px] h-[550px] border border-dashed border-cyan-500/5 rounded-full animate-spin [animation-duration:60s] [animation-direction:reverse] pointer-events-none" />
+      {/* Grid line accent at top */}
+      <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-cyan-500/30 to-transparent" />
 
       {/* Floating System Stat Lines */}
-      <div className="absolute top-6 left-6 text-[10px] font-mono tracking-widest text-[#00f0ff]/40 flex gap-6">
-        <div>SYS: ONLINE</div>
-        <div>NODE_SEC: CLEARANCE LEVEL 4</div>
-        <div>SEC_LATENCY: 1.48ms</div>
+      <div className="absolute top-6 left-6 text-[9px] font-mono tracking-widest text-slate-500 flex gap-6">
+        <div>CORE OS v5.24</div>
+        <div>STATION: SECURE_LOGIN_HUB</div>
+        <div>ALGORITHMS: ACTIVE</div>
       </div>
-      <div className="absolute top-6 right-6 text-[10px] font-mono tracking-widest text-emerald-400/40 flex items-center gap-1.5">
-        <Activity className="h-3 w-3 animate-pulse" />
-        <span>CARESYNC ENGINE STATUS: NOMINAL</span>
+      <div className="absolute top-6 right-6 text-[9px] font-mono tracking-widest text-cyan-400/50 flex items-center gap-1.5">
+        <Activity className="h-3 w-3 animate-pulse text-cyan-400" />
+        <span>CARESYNC CENTRAL ENCRYPTED GATEWAY</span>
       </div>
 
-      <div className="w-full max-w-lg z-10">
+      <div className="w-full max-w-md z-10">
         {/* System Branding and Logo */}
         <div className="text-center mb-8">
           <motion.div
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
-            className="inline-flex items-center gap-3 bg-[#0d1527] border border-cyan-500/20 px-4 py-2 rounded-full mb-3 shadow-[0_0_20px_rgba(0,240,255,0.05)]"
+            className="inline-flex items-center gap-2.5 bg-[#07111e] border border-cyan-500/20 px-4 py-2 rounded-xl mb-3 shadow-[0_0_20px_rgba(0,240,255,0.05)]"
           >
             <Activity className="h-5 w-5 text-cyan-400 animate-pulse" />
             <span className="font-display font-black text-sm tracking-[0.25em] text-white">CARESYNC <span className="text-cyan-400">AI</span></span>
@@ -105,101 +140,147 @@ export default function AuthScreen({ onLoginSuccess }: AuthProps) {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.2 }}
-            className="text-xs font-mono text-cyan-500/60 tracking-widest uppercase mt-1"
+            className="text-[10px] uppercase font-mono text-cyan-500/70 tracking-[0.18em] mt-1"
           >
-            HOSPITAL DIGITAL TWIN OPERATIONS CO-PILOT
+            Clinical Staff Duty Validation Key
           </motion.h1>
         </div>
 
         {/* Auth Glassmorphic Portal */}
         <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.1 }}
-          className="relative bg-[#0b1120]/80 backdrop-blur-xl border border-cyan-500/20 rounded-2xl p-6 shadow-[0_0_50px_rgba(0,240,255,0.03),_inset_0_1px_1px_rgba(255,255,255,0.05)] clip-cyber-top-left"
+          className="relative bg-[#050b12]/95 backdrop-blur-xl border border-slate-900 rounded-2xl p-6 shadow-[0_15px_40px_rgba(0,0,0,0.6)]"
         >
-          {/* Diagnostic Accent Line */}
-          <div className="absolute top-0 right-12 left-12 h-[1px] bg-gradient-to-r from-transparent via-cyan-400 to-transparent shadow-[0_0_8px_rgba(0,240,255,0.8)]" />
-
-          {/* Role Switching Interactive Cards */}
-          <div className="grid grid-cols-3 gap-3 mb-6">
-            {(["doctor", "nurse", "admin"] as UserRole[]).map((role) => (
+          {/*********** ROLE SELECTOR ***********/}
+          <div className="text-[10px] font-mono tracking-wider text-slate-400 uppercase mb-2 text-left">
+            Select Clearance Duty Role:
+          </div>
+          <div className="grid grid-cols-2 gap-3 mb-6">
+            {(["doctor", "nurse"] as UserRole[]).map((role) => (
               <button
                 key={role}
                 id={`role-btn-${role}`}
                 type="button"
                 onClick={() => handleRoleSelect(role)}
-                className={`relative px-3 py-4 rounded-xl border text-center transition-all cursor-pointer ${
+                className={`flex items-center justify-center gap-2 py-3 px-4 rounded-xl border text-center transition-all cursor-pointer ${
                   selectedRole === role
-                    ? "bg-[#0e223c] border-cyan-400 shadow-[0_0_15px_rgba(0,240,255,0.15)] text-white"
-                    : "bg-[#080d19]/60 border-slate-800/80 hover:border-slate-700 text-slate-400 hover:text-slate-200"
+                    ? "bg-[#0b1b2d] border-cyan-500 text-white shadow-[0_0_12px_rgba(0,240,255,0.08)]"
+                    : "bg-[#04070c] border-slate-900 text-slate-500 hover:text-slate-350 hover:border-slate-800"
                 }`}
               >
-                <div className="flex flex-col items-center gap-2">
-                  <span className={`p-1.5 rounded-lg ${
-                    selectedRole === role ? "bg-cyan-500/20 text-cyan-400" : "bg-slate-800/40 text-slate-400"
-                  }`}>
-                    {role === "doctor" && <ShieldCheck className="h-5 w-5" />}
-                    {role === "nurse" && <UserCheck className="h-5 w-5" />}
-                    {role === "admin" && <Key className="h-5 w-5" />}
-                  </span>
-                  <div className="text-2xs font-mono uppercase tracking-widest font-bold">
-                    {role}
-                  </div>
-                </div>
+                {role === "doctor" ? (
+                  <ShieldCheck className={`h-4 w-4 ${selectedRole === role ? "text-cyan-400" : "text-slate-600"}`} />
+                ) : (
+                  <UserCheck className={`h-4 w-4 ${selectedRole === role ? "text-cyan-400" : "text-slate-600"}`} />
+                )}
+                <span className="text-2xs font-mono uppercase tracking-widest font-black">
+                  {role} PORTAL
+                </span>
               </button>
             ))}
           </div>
 
           <form onSubmit={handleClearanceSubmit} className="space-y-4">
+            
+            {/* Quick staff select dropdown */}
             <div>
-              <label className="block text-[10px] font-mono tracking-wider text-slate-400 uppercase mb-2">
-                Clearance Signature token
+              <label className="block text-[10px] font-mono tracking-wider text-slate-400 uppercase mb-1.5 text-left">
+                Choose Registered Account
+              </label>
+              <select
+                id="staff-selector-dropdown"
+                value={typedStaffId}
+                onChange={(e) => handleStaffSelect(e.target.value)}
+                disabled={isScanning}
+                className="w-full bg-[#04070c] border border-slate-900 rounded-lg py-2.5 px-3 text-2xs font-mono tracking-wider text-slate-300 focus:outline-none focus:border-cyan-500 cursor-pointer"
+              >
+                {selectedRole === "doctor" ? (
+                  <>
+                    <option value="DOC001">Dr. Arjun Kumar (Staff ID: DOC001)</option>
+                    <option value="DOC002">Dr. Priya Sharma (Staff ID: DOC002)</option>
+                  </>
+                ) : (
+                  <>
+                    <option value="NUR001">Nurse Meera Joseph (Staff ID: NUR001)</option>
+                    <option value="NUR002">Nurse Rahul Das (Staff ID: NUR002)</option>
+                  </>
+                )}
+              </select>
+            </div>
+
+            {/* Display matched Full Name (calculated or typed) */}
+            <div className="bg-[#04070c] border border-slate-900/60 p-3 rounded-lg flex items-center justify-between">
+              <div className="text-left">
+                <span className="text-[8px] font-mono uppercase text-slate-505 block leading-none mb-1">Assigned Name</span>
+                <span className="text-xs font-mono font-black text-cyan-400">{selectedName}</span>
+              </div>
+              <div className="text-right">
+                <span className="text-[8px] font-mono uppercase text-slate-505 block leading-none mb-1">System Sector</span>
+                <span className="text-[10px] font-mono font-black text-slate-300">
+                  {selectedRole === "doctor" ? "ICU & CARDIOLOGY Wards" : "EMERGENCY & Wards"}
+                </span>
+              </div>
+            </div>
+
+            {/* PASSCODE / PIN AUTH FIELD */}
+            <div>
+              <label className="block text-[11px] font-mono tracking-wider text-slate-400 uppercase mb-1.5 text-left">
+                biometric safety passcode
               </label>
               <div className="relative">
                 <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-500">
-                  <Key className="h-4 w-4" />
+                  <Lock className="h-3.5 w-3.5" />
                 </span>
                 <input
-                  id="security-token-input"
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-[#060a12] border border-slate-800 focus:border-cyan-400/80 rounded-lg py-2.5 pl-10 pr-10 text-sm font-mono tracking-widest text-[#00f0ff] focus:outline-none transition-all focus:ring-1 focus:ring-cyan-500/20 shadow-[inset_0_2px_4px_rgba(0,0,0,0.4)]"
-                  placeholder="CRYPTOGRAPHIC_KEY_VALUE"
+                  type={showPasscode ? "text" : "password"}
+                  required
+                  value={passcode}
+                  onChange={(e) => setPasscode(e.target.value)}
                   disabled={isScanning}
+                  maxLength={10}
+                  placeholder="Enter medical PIN..."
+                  autoComplete="current-password"
+                  className="w-full bg-[#04070c] border border-slate-900 rounded-lg py-2.5 pl-9 pr-10 text-xs font-mono tracking-wider text-white focus:outline-none focus:border-cyan-500"
                 />
                 <button
-                  id="toggle-reveal-pass-btn"
                   type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-500 hover:text-slate-300"
+                  onClick={() => setShowPasscode(!showPasscode)}
+                  className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-100 cursor-pointer"
                 >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  {showPasscode ? (
+                    <EyeOff className="h-3.5 w-3.5" />
+                  ) : (
+                    <Eye className="h-3.5 w-3.5" />
+                  )}
                 </button>
+              </div>
+              <div className="text-left mt-1 text-[8px] font-mono text-slate-500 uppercase">
+                {selectedRole === "doctor" ? "💡 PIN passcode is 1234" : "💡 PIN passcode is 5678"}
               </div>
             </div>
 
             {errorMsg && (
-              <div className="flex items-center gap-2 text-xs text-rose-500 bg-rose-500/5 border border-rose-500/20 px-3 py-2 rounded-lg font-mono">
+              <div className="flex items-center gap-2 text-2xs text-rose-500 bg-rose-950/20 border border-rose-900/40 px-3.5 py-2.5 rounded-lg font-mono">
                 <AlertCircle className="h-4 w-4 shrink-0" />
                 <span>{errorMsg}</span>
               </div>
             )}
 
-            {/* Simulated Fingerprint scanning line */}
+            {/* Scanning line animation */}
             <AnimatePresence>
               {isScanning && (
                 <motion.div
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: "auto" }}
                   exit={{ opacity: 0, height: 0 }}
-                  className="bg-[#050b16] border border-cyan-500/20 rounded-lg p-3 overflow-hidden relative"
+                  className="bg-[#03070d] border border-cyan-500/20 rounded-lg p-3 overflow-hidden relative"
                 >
-                  <div className="absolute top-0 left-0 right-0 h-[2px] bg-cyan-400 animate-[scanline-anim_1.8s_infinite] shadow-[0_0_15px_#00f0ff]" />
-                  <div className="font-mono text-[11px] text-cyan-400 flex flex-col gap-1.5 items-center justify-center py-2">
-                    <Activity className="h-5 w-5 text-cyan-400 animate-pulse" />
-                    <span className="tracking-widest animate-pulse font-bold">{scanStatus || "BIOMETRIC INITIALIZING..."}</span>
+                  <div className="absolute top-0 left-0 right-0 h-[2px] bg-cyan-400 animate-[scanline-anim_1.5s_infinite] shadow-[0_0_12px_#00f0ff]" />
+                  <div className="font-mono text-3xs text-cyan-400 flex flex-col gap-1 items-center justify-center py-2.5">
+                    <Activity className="h-4.5 w-4.5 text-cyan-400 animate-pulse" />
+                    <span className="tracking-widest animate-pulse font-bold uppercase">{scanStatus || "AUTHENTICATING STAFF SIGNATURE..."}</span>
                   </div>
                 </motion.div>
               )}
@@ -211,34 +292,18 @@ export default function AuthScreen({ onLoginSuccess }: AuthProps) {
               disabled={isScanning}
               className={`w-full py-3 rounded-lg font-display text-xs font-bold tracking-widest uppercase transition-all flex items-center justify-center gap-2 cursor-pointer border ${
                 isScanning
-                  ? "bg-cyan-900/10 border-cyan-500/20 text-cyan-400/40 cursor-not-allowed"
-                  : "bg-cyan-500 text-black border-cyan-400 hover:bg-cyan-400 hover:shadow-[0_0_20px_rgba(0,240,255,0.4)]"
+                  ? "bg-slate-900/20 border-slate-900 text-slate-550 cursor-not-allowed"
+                  : "bg-cyan-500 text-black border-cyan-400 hover:bg-cyan-400 hover:shadow-[0_0_15px_rgba(0,240,255,0.22)]"
               }`}
             >
-              <ShieldCheck className="h-4 w-4 animate-pulse" />
-              <span>{isScanning ? "BIOMETRIC AUTHENTICATING..." : "REQUEST SYSTEM ACCESS"}</span>
+              <Building className="h-4 w-4" />
+              <span>{isScanning ? "DEPLOYING ACCESS CONTROL..." : "VALIDATE SECURITY CLEARANCE"}</span>
             </button>
           </form>
 
-          {/* Quick Guidance credentials chips for reviewers */}
-          <div className="mt-6 pt-5 border-t border-slate-800/80 bg-[#060a12]/40 rounded-lg p-3">
-            <div className="text-[10px] font-mono uppercase text-slate-500 tracking-wider mb-2">
-              Assigned Access Keys (Reviewer Cheat Sheet)
-            </div>
-            <div className="space-y-1.5 text-3xs font-mono text-slate-400">
-              <div className="flex justify-between items-center bg-[#0d1323] px-2 py-1 rounded">
-                <span className="text-cyan-400 font-bold">Doctor Role:</span>
-                <span>doc_synapse_2026</span>
-              </div>
-              <div className="flex justify-between items-center bg-[#0d1323] px-2 py-1 rounded">
-                <span className="text-[#ff007f] font-bold">Nurse Role:</span>
-                <span>nurse_vitals_critical</span>
-              </div>
-              <div className="flex justify-between items-center bg-[#0d1323] px-2 py-1 rounded">
-                <span className="text-amber-400 font-bold">Admin Role:</span>
-                <span>admin_hypervisor_root</span>
-              </div>
-            </div>
+          {/* Quick instructions badge */}
+          <div className="mt-5 text-[9px] font-mono text-slate-600 leading-normal text-center uppercase">
+            CARESYNC CENTRALIZED ENCRYPTION ENFORCED. ALL VISITS REGISTERED & AUDITED.
           </div>
         </motion.div>
       </div>

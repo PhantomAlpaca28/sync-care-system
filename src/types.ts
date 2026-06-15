@@ -1,8 +1,9 @@
-export type UserRole = "doctor" | "nurse" | "admin";
+export type UserRole = "doctor" | "nurse";
 
 export interface UserSession {
   username: string;
   role: UserRole;
+  staffId: string;
   token: string;
 }
 
@@ -12,6 +13,7 @@ export interface PatientVitals {
   systolicBP: number; // mmHg
   diastolicBP: number; // mmHg
   temperature: number; // °C
+  respiratoryRate: number; // breaths per min
 }
 
 export interface AIPrediction {
@@ -45,6 +47,7 @@ export interface PatientHistoryItem {
   spo2: number;
   bloodPressure: string;
   temperature: number;
+  respiratoryRate: number;
   riskScore: number;
 }
 
@@ -54,8 +57,9 @@ export interface Patient {
   age: number;
   gender: string;
   roomNumber: string;
-  department: "ICU" | "Emergency" | "Cardiology" | "General Ward" | "Neurology";
+  department: "ICU" | "Emergency" | "Cardiology" | "General Ward" | "Neurology" | "Surgery Ward";
   diagnosis: string;
+  bloodGroup: "O+" | "O-" | "A+" | "A-" | "B+" | "B-" | "AB+" | "AB-";
   vitals: PatientVitals;
   riskScore: number;
   status: "Stable" | "Warning" | "High Risk" | "Critical";
@@ -81,4 +85,63 @@ export interface ScenarioDefinition {
   id: string;
   name: string;
   description: string;
+}
+
+export interface CareTask {
+  id: string;
+  patientId: string;
+  patientName: string;
+  roomNumber: string;
+  taskName: string;
+  dueDate: string;
+  status: "pending" | "completed";
+  assignedNurse: string;
+  priority: "low" | "medium" | "high";
+}
+
+export interface MedicationScheduleItem {
+  id: string;
+  patientId: string;
+  patientName: string;
+  roomNumber: string;
+  medication: string;
+  dosage: string;
+  time: string;
+  status: "scheduled" | "administered" | "missed";
+}
+
+export interface ShiftActivityItem {
+  id: string;
+  time: string;
+  type: "task_complete" | "alert_ack" | "vitals_update" | "note_added" | "med_administered" | "blood_request";
+  message: string;
+}
+
+// Resource Intelligence Module Data Types
+export interface BloodStock {
+  group: "O+" | "O-" | "A+" | "A-" | "B+" | "B-" | "AB+" | "AB-";
+  units: number;
+  criticalThreshold: number;
+  expiringUnits: number;
+}
+
+export interface BloodRequest {
+  id: string;
+  patientId: string;
+  patientName: string;
+  roomNumber: string;
+  bloodGroup: "O+" | "O-" | "A+" | "A-" | "B+" | "B-" | "AB+" | "AB-";
+  units: number;
+  urgency: "routine" | "urgent" | "stat";
+  status: "pending" | "fulfilled" | "declined";
+  timestamp: string;
+}
+
+export interface BloodDonation {
+  id: string;
+  donorName: string;
+  bloodGroup: "O+" | "O-" | "A+" | "A-" | "B+" | "B-" | "AB+" | "AB-";
+  units: number;
+  timestamp: string;
+  status: "completed" | "testing";
 }
